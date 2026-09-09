@@ -52,32 +52,50 @@ function createWindow() {
 
 app.whenReady().then(async () => {
   try {
+    // With asar: false, the structure is release/win-unpacked/resources/app/dist/server.cjs
     const serverPath = app.isPackaged 
       ? path.join(process.resourcesPath, 'app', 'dist', 'server.cjs') 
       : path.join(__dirname, 'dist', 'server.cjs');
     
-    // Check if the server file exists
-    require('fs').accessSync(serverPath);
+    console.log(`[EXFIN] Attempting to launch backend at: ${serverPath}`);
 
-    // Fork the process to run the server
+    // Verify file existence
+    if (!require('fs').existsSync(serverPath)) {
+      throw new Error(`Backend binary not found at ${serverPath}`);
+    }
+
+    // Fork the process
     serverProcess = spawn(process.execPath, [serverPath], { 
-      env: { ...process.env, NODE_ENV: 'production', ELECTRON_RUN_AS_NODE: '1' } 
+      env: { 
+        ...process.env, 
+        NODE_ENV: 'production', 
+        ELECTRON_RUN_AS_NODE: '1' 
+      } 
     });
 
     serverProcess.stdout.on('data', (data) => console.log(`[EXFIN Backend]: ${data}`));
     serverProcess.stderr.on('data', (data) => console.error(`[EXFIN Backend Error]: ${data}`));
     
+    // Readiness check
     try {
-      await checkBackendReady('http://127.0.0.1:3000/api/health');
+      console.log("[EXFIN] Waiting for backend readiness...");
+      await checkBackendReady('http://127.0.0.1:3000/api/health', 20000);
+      console.log("[EXFIN] Backend ready, creating window.");
       createWindow();
     } catch (timeoutErr) {
-      console.error(timeoutErr);
-      dialog.showErrorBox("Startup Timeout", "The backend server took too long to start. Please try restarting the application.");
+      console.error("[EXFIN] Backend failed to start:", timeoutErr);
+      dialog.showErrorBox(
+        "Application Startup Failed", 
+        "The EXFIN data engine failed to initialize within the expected time.\n\nPlease check if port 3000 is being blocked by another application."
+      );
       app.quit();
     }
   } catch (error) {
-    console.error("Could not launch backend server:", error);
-    dialog.showErrorBox("Backend Missing", "The backend server could not be located. Error: " + error.message);
+    console.error("[EXFIN] Critical launch error:", error);
+    dialog.showErrorBox(
+      "Backend Initialization Error", 
+      `An error occurred while starting the application core: ${error.message}`
+    );
     app.quit();
   }
 });

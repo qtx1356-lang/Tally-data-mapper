@@ -5875,10 +5875,21 @@ Last Error: ${httpAvailable ? "None" : (errorMessage || `TallyPrime was not dete
     });
     app.use(vite.middlewares);
   } else {
-    const distPath = path.join(__dirname, "dist");
+    // In production, the bundled server.cjs is located inside the 'dist' folder.
+    // Therefore, __dirname IS the directory containing the static frontend assets.
+    const distPath = __dirname;
+    console.log(`[EXFIN Backend] Serving production assets from: ${distPath}`);
+    
     app.use(express.static(distPath));
+    
+    // Explicit SPA Fallback: All non-API routes serve index.html
     app.get("*", (req, res) => {
-      res.sendFile(path.join(distPath, "index.html"));
+      const indexPath = path.join(distPath, "index.html");
+      if (fs.existsSync(indexPath)) {
+        res.sendFile(indexPath);
+      } else {
+        res.status(404).send("EXFIN Critical Error: Frontend assets (index.html) missing from distribution.");
+      }
     });
   }
 
