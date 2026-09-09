@@ -1,0 +1,6 @@
+{
+  "name": "EXFIN Tally Data Mapper",
+  "description": "Production-quality application for TallyPrime and Tally.ERP 9 data discovery, universal connectivity, analytical warehousing, reliable synchronization, data quality engine, advanced query engine, operational safety, Phase 32I universal reporting system, Phase 32O enterprise automation engine, Phase 32P advanced financial and management intelligence, Phase 32Q universal Tally output discovery and report compatibility, and Phase 32R universal Tally version compatibility matrix, safe XML/TDL parsing, schema drift, and mapping evolution.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

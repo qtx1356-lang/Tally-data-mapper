@@ -1,0 +1,70 @@
+<Window x:Class="EXFIN.TallyMapper.App.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="EXFIN Tally Data Mapper - V1.0.0" Height="720" Width="1280"
+        Background="{StaticResource BgDeepNavyBrush}"
+        WindowStartupLocation="CenterScreen">
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="50"/>
+            <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
+
+        <!-- Top Bar -->
+        <Border Grid.Row="0" Background="{StaticResource BgSidebarBrush}" BorderBrush="{StaticResource SurfaceBorderBrush}" BorderThickness="0,0,0,1" Padding="16,0">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+
+                <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
+                    <TextBlock Text="EXFIN Tally Data Mapper" Foreground="{StaticResource TextPrimaryBrush}" FontSize="16" FontWeight="Bold"/>
+                    <TextBlock Text="v1.0.0" Foreground="{StaticResource TextMutedBrush}" FontSize="12" Margin="8,2,0,0" VerticalAlignment="Center"/>
+                </StackPanel>
+
+                <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
+                    <Border Background="#1E293B" CornerRadius="12" Padding="10,4" Margin="0,0,12,0">
+                        <StackPanel Orientation="Horizontal">
+                            <Ellipse Width="8" Height="8" Fill="{StaticResource TextMutedBrush}" Margin="0,0,6,0"/>
+                            <TextBlock x:Name="TxtStatus" Text="Disconnected" Foreground="{StaticResource TextSecondaryBrush}" FontSize="12"/>
+                        </StackPanel>
+                    </Border>
+                    <TextBlock x:Name="TxtCompany" Text="Company: None" Foreground="{StaticResource TextSecondaryBrush}" FontSize="12" VerticalAlignment="Center" Margin="0,0,16,0"/>
+                    <Button Content="Refresh" Style="{StaticResource PrimaryButtonStyle}" Height="30"/>
+                </StackPanel>
+            </Grid>
+        </Border>
+
+        <!-- Main Body -->
+        <Grid Grid.Row="1">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="220"/>
+                <ColumnDefinition Width="*"/>
+            </Grid.ColumnDefinitions>
+
+            <!-- Navigation Sidebar -->
+            <Border Grid.Column="0" Background="{StaticResource BgSidebarBrush}" BorderBrush="{StaticResource SurfaceBorderBrush}" BorderThickness="0,0,1,0">
+                <StackPanel Margin="0,12">
+                    <Button Content="Dashboard" Style="{StaticResource NavButtonStyle}"/>
+                    <Button Content="Companies" Style="{StaticResource NavButtonStyle}"/>
+                    <Button Content="Data Discovery" Style="{StaticResource NavButtonStyle}"/>
+                    <Button Content="Data Explorer" Style="{StaticResource NavButtonStyle}"/>
+                    <Button Content="Output Mapper" Style="{StaticResource NavButtonStyle}"/>
+                    <Button Content="Query Builder" Style="{StaticResource NavButtonStyle}"/>
+                    <Button Content="Saved Templates" Style="{StaticResource NavButtonStyle}"/>
+                    <Button Content="Exports" Style="{StaticResource NavButtonStyle}"/>
+                    <Button Content="Connection Diagnostics" Style="{StaticResource NavButtonStyle}"/>
+                    <Button Content="Settings" Style="{StaticResource NavButtonStyle}"/>
+                    <Button Content="About" Style="{StaticResource NavButtonStyle}"/>
+                </StackPanel>
+            </Border>
+
+            <!-- Content Area -->
+            <Grid Grid.Column="1" x:Name="MainContentFrame" Margin="20">
+                <TextBlock Text="EXFIN Tally Data Mapper Workspace" Foreground="{StaticResource TextPrimaryBrush}" FontSize="20" FontWeight="Bold"/>
+            </Grid>
+        </Grid>
+    </Grid>
+</Window>
