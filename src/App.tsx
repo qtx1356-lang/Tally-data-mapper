@@ -62,6 +62,14 @@ import Phase32YApiGatewayView from './components/Phase32YApiGatewayView';
 import Phase32ZPluginManagerView from './components/Phase32ZPluginManagerView';
 import Phase33ProductionView from './components/Phase33ProductionView';
 import Phase33ADiscoveryView from './components/Phase33ADiscoveryView';
+import { AuditCenterView } from './components/audit/AuditCenterView';
+import { AuditScannerView } from './components/audit/AuditScannerView';
+import { ExceptionCenterView } from './components/audit/ExceptionCenterView';
+import { AuditFindingsView } from './components/audit/AuditFindingsView';
+import { AuditSamplingView } from './components/audit/AuditSamplingView';
+import { AuditWorkspaceView } from './components/audit/AuditWorkspaceView';
+import { AIAuditAssistantView } from './components/audit/AIAuditAssistantView';
+import { FinancialAnalyticsView } from './components/audit/FinancialAnalyticsView';
 import {
   Brain,
   LayoutDashboard,
@@ -115,75 +123,65 @@ import {
   Archive,
   HardDrive,
   Monitor,
-  Users
+  Users,
+  Search,
+  PieChart,
+  LineChart,
+  ShoppingBag,
+  Truck,
+  CreditCard,
+  Wallet,
+  Box,
+  Key,
+  TrendingUp,
+  TrendingDown
 } from 'lucide-react';
 
 type NavigationPage =
   | 'Dashboard'
-  | 'Phase 33A Adaptive Discovery'
-  | 'Phase 33 Desktop App'
-  | 'Phase 32Z Plugins'
-  | 'Phase 32Y API Gateway'
-  | 'Phase 32X Consolidation'
-  | 'Phase 32W Automation'
-  | 'Phase 32V Intelligence'
-  | 'Phase 32U Analytics'
-  | 'Phase 32T Reports'
-  | 'Phase 32S Profiling'
-  | 'Phase 32R Compatibility'
-  | 'Phase 32Q Output Compat'
-  | 'Phase 32P Financial Intel'
-  | 'Phase 32O Automation'
-  | 'Phase 32N Workspace'
-  | 'Phase 32M Desktop'
-  | 'Phase 32L Analytics'
-  | 'Data Catalog'
-  | 'Object Graph'
-  | 'Data Lineage Center'
-  | 'Backup & Restore'
-  | 'Storage & System Health'
-  | 'Security & Audit Center'
-  | 'Reports'
-  | 'Report Harvester'
-  | 'Connections'
-  | 'Intelligence'
-  | 'Control Center'
-  | 'Output Studio'
-  | 'Connector Center'
-  | 'Financial Control'
-  | 'Enterprise Document Intelligence'
-  | 'Universal Data Import & Reconciliation'
-  | 'Enterprise Automation Center'
-  | 'Report Reconstruction Engine'
-  | 'Universal Tally Connector'
-  | 'Local Data Engine'
-  | 'Accounting Intelligence'
-  | 'Universal Output Discovery'
-  | 'Enterprise Admin Portal'
-  | 'Companies'
-  | 'Enterprise Security & Licensing'
-  | 'Tally Intelligence Copilot'
-  | 'Universal Schema Explorer'
-  | 'Universal Query & Explorer'
-  | 'Reconciliation & Quality'
-  | 'Data Discovery'
-  | 'Data Explorer'
-  | 'Output Mapper'
-  | 'Query Builder'
-  | 'Saved Templates'
-  | 'Export Data'
-  | 'Export Profiles'
-  | 'Export History'
-  | 'Automation Jobs'
-  | 'Report Designer'
+  // Tally
+  | 'Tally Connection'
+  | 'Company Explorer'
+  | 'Smart Tally Discovery'
+  | 'Data Mapping'
+  // Audit
+  | 'Audit Center'
+  | 'Automated Audit Scanner'
+  | 'Risk & Exceptions'
+  | 'Audit Sampling'
+  | 'Audit Workspace'
+  | 'Audit Findings'
+  // Analysis
+  | 'Financial Analytics'
+  | 'Receivable Analysis'
+  | 'Payable Analysis'
+  | 'Sales Analysis'
+  | 'Purchase Analysis'
+  | 'Expense Analysis'
+  | 'GST & Tax Analytics'
+  | 'Cash & Bank Analytics'
+  | 'Inventory Analysis'
+  | 'Consolidated Accounts'
+  // Intelligence
+  | 'AI Audit Assistant'
+  | 'Anomaly Detection'
+  | 'Financial Intelligence'
+  | 'Company Profiling'
+  // Reporting
   | 'Report Library'
   | 'Visual Dashboards'
-  | 'Document PDF Engine'
-  | 'Report Scheduling'
+  | 'Report Designer'
+  | 'Report Scheduler'
   | 'Report Packages'
-  | 'Connection Diagnostics'
-  | 'Settings'
-  | 'Solution Inspector'
+  // Automation
+  | 'Automation Center'
+  | 'Scheduled Jobs'
+  | 'API Gateway'
+  | 'Plugins'
+  // System
+  | 'Security & Admin'
+  | 'System Health'
+  | 'Backup & Restore'
   | 'About';
 
 interface AppSettings {
@@ -509,73 +507,83 @@ export default function App() {
     }));
   };
 
-  const navItems: { label: NavigationPage; icon: any }[] = [
-    { label: 'Dashboard', icon: LayoutDashboard },
-    { label: 'Phase 33A Adaptive Discovery', icon: Compass },
-    { label: 'Phase 33 Desktop App', icon: Monitor },
-    { label: 'Phase 32Z Plugins', icon: Blocks },
-    { label: 'Phase 32Y API Gateway', icon: Server },
-    { label: 'Phase 32X Consolidation', icon: Globe },
-    { label: 'Phase 32W Automation', icon: Zap },
-    { label: 'Phase 32V Intelligence', icon: Brain },
-    { label: 'Phase 32U Analytics', icon: Sliders },
-    { label: 'Phase 32T Reports', icon: FileSpreadsheet },
-    { label: 'Phase 32S Profiling', icon: Sliders },
-    { label: 'Phase 32R Compatibility', icon: GitBranch },
-    { label: 'Phase 32Q Output Compat', icon: Activity },
-    { label: 'Phase 32P Financial Intel', icon: BarChart3 },
-    { label: 'Phase 32O Automation', icon: Clock },
-    { label: 'Phase 32N Workspace', icon: Users },
-    { label: 'Phase 32M Desktop', icon: Monitor },
-    { label: 'Phase 32L Analytics', icon: Compass },
-    { label: 'Data Catalog', icon: Database },
-    { label: 'Object Graph', icon: GitFork },
-    { label: 'Data Lineage Center', icon: GitFork },
-    { label: 'Backup & Restore', icon: Archive },
-    { label: 'Storage & System Health', icon: HardDrive },
-    { label: 'Security & Audit Center', icon: ShieldCheck },
-    { label: 'Reports', icon: FileSpreadsheet },
-    { label: 'Report Harvester', icon: Compass },
-    { label: 'Connections', icon: Radio },
-    { label: 'Intelligence', icon: Brain },
-    { label: 'Control Center', icon: ShieldCheck },
-    { label: 'Output Studio', icon: FileSpreadsheet },
-    { label: 'Connector Center', icon: Radio },
-    { label: 'Financial Control', icon: BarChart3 },
-    { label: 'Enterprise Document Intelligence', icon: ScanText },
-    { label: 'Universal Data Import & Reconciliation', icon: ArrowLeftRight },
-    { label: 'Enterprise Automation Center', icon: Zap },
-    { label: 'Tally Intelligence Copilot', icon: Bot },
-    { label: 'Report Reconstruction Engine', icon: Layers },
-    { label: 'Universal Tally Connector', icon: Radio },
-    { label: 'Local Data Engine', icon: Database },
-    { label: 'Universal Output Discovery', icon: Compass },
-    { label: 'Accounting Intelligence', icon: BarChart3 },
-    { label: 'Enterprise Security & Licensing', icon: Shield },
-    { label: 'Enterprise Admin Portal', icon: Globe },
-    { label: 'Companies', icon: Building2 },
-    { label: 'Universal Schema Explorer', icon: Compass },
-    { label: 'Universal Query & Explorer', icon: Layers },
-    { label: 'Reconciliation & Quality', icon: Scale },
-    { label: 'Data Discovery', icon: Compass },
-    { label: 'Data Explorer', icon: Database },
-    { label: 'Output Mapper', icon: GitMerge },
-    { label: 'Query Builder', icon: Filter },
-    { label: 'Saved Templates', icon: FileCode },
-    { label: 'Export Data', icon: Download },
-    { label: 'Export Profiles', icon: Settings2 },
-    { label: 'Export History', icon: Clock },
-    { label: 'Automation Jobs', icon: Activity },
-    { label: 'Report Designer', icon: FileCode },
-    { label: 'Report Library', icon: Server },
-    { label: 'Visual Dashboards', icon: LayoutDashboard },
-    { label: 'Document PDF Engine', icon: Printer },
-    { label: 'Report Scheduling', icon: Mail },
-    { label: 'Report Packages', icon: BookOpen },
-    { label: 'Connection Diagnostics', icon: Terminal },
-    { label: 'Settings', icon: Settings },
-    { label: 'Solution Inspector', icon: FolderTree },
-    { label: 'About', icon: Info }
+  const navigationStructure: { section: string; items: { label: NavigationPage; icon: any }[] }[] = [
+    {
+      section: 'DASHBOARD',
+      items: [{ label: 'Dashboard', icon: LayoutDashboard }]
+    },
+    {
+      section: 'TALLY',
+      items: [
+        { label: 'Tally Connection', icon: Radio },
+        { label: 'Company Explorer', icon: Building2 },
+        { label: 'Smart Tally Discovery', icon: Compass },
+        { label: 'Data Mapping', icon: GitMerge }
+      ]
+    },
+    {
+      section: 'AUDIT',
+      items: [
+        { label: 'Audit Center', icon: ShieldCheck },
+        { label: 'Automated Audit Scanner', icon: Activity },
+        { label: 'Risk & Exceptions', icon: AlertTriangle },
+        { label: 'Audit Sampling', icon: Filter },
+        { label: 'Audit Workspace', icon: FolderTree },
+        { label: 'Audit Findings', icon: CheckCircle2 }
+      ]
+    },
+    {
+      section: 'ANALYSIS',
+      items: [
+        { label: 'Financial Analytics', icon: BarChart3 },
+        { label: 'Receivable Analysis', icon: TrendingDown },
+        { label: 'Payable Analysis', icon: TrendingUp },
+        { label: 'Sales Analysis', icon: ShoppingBag },
+        { label: 'Purchase Analysis', icon: Truck },
+        { label: 'Expense Analysis', icon: CreditCard },
+        { label: 'GST & Tax Analytics', icon: Scale },
+        { label: 'Cash & Bank Analytics', icon: Wallet },
+        { label: 'Inventory Analysis', icon: Box },
+        { label: 'Consolidated Accounts', icon: Globe }
+      ]
+    },
+    {
+      section: 'INTELLIGENCE',
+      items: [
+        { label: 'AI Audit Assistant', icon: Brain },
+        { label: 'Anomaly Detection', icon: Zap },
+        { label: 'Financial Intelligence', icon: Sparkles },
+        { label: 'Company Profiling', icon: Search }
+      ]
+    },
+    {
+      section: 'REPORTING',
+      items: [
+        { label: 'Report Library', icon: FileSpreadsheet },
+        { label: 'Visual Dashboards', icon: PieChart },
+        { label: 'Report Designer', icon: FileCode },
+        { label: 'Report Scheduler', icon: Mail },
+        { label: 'Report Packages', icon: BookOpen }
+      ]
+    },
+    {
+      section: 'AUTOMATION',
+      items: [
+        { label: 'Automation Center', icon: Zap },
+        { label: 'Scheduled Jobs', icon: Clock },
+        { label: 'API Gateway', icon: Server },
+        { label: 'Plugins', icon: Blocks }
+      ]
+    },
+    {
+      section: 'SYSTEM',
+      items: [
+        { label: 'Security & Admin', icon: Key },
+        { label: 'System Health', icon: HardDrive },
+        { label: 'Backup & Restore', icon: Archive },
+        { label: 'About', icon: Info }
+      ]
+    }
   ];
 
   return (
@@ -586,36 +594,13 @@ export default function App() {
           <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-sky-600 font-black text-white text-xs shadow-md">
             EX
           </div>
-          <span className="font-bold text-sm text-slate-100 tracking-wide">
-            EXFIN Tally Data Mapper
-          </span>
-          <span className="rounded bg-slate-800 px-2 py-0.5 text-[10px] font-mono font-medium text-emerald-400 border border-slate-700">
-            Phase 13 Admin Ready
-          </span>
-
-          {/* System Switcher: Desktop vs Central Admin Portal */}
-          <div className="flex items-center bg-slate-900 border border-slate-700 rounded-lg p-0.5 text-xs ml-4">
-            <button
-              onClick={() => setCurrentPage('Dashboard')}
-              className={`px-2.5 py-1 rounded-md font-medium transition-all flex items-center gap-1.5 ${
-                currentPage !== 'Enterprise Admin Portal'
-                  ? 'bg-sky-600 text-white shadow-sm'
-                  : 'text-slate-400 hover:text-slate-200'
-              }`}
-            >
-              <span>System A: Desktop</span>
-            </button>
-            <button
-              onClick={() => setCurrentPage('Enterprise Admin Portal')}
-              className={`px-2.5 py-1 rounded-md font-medium transition-all flex items-center gap-1.5 ${
-                currentPage === 'Enterprise Admin Portal'
-                  ? 'bg-purple-600 text-white shadow-sm'
-                  : 'text-slate-400 hover:text-purple-300'
-              }`}
-            >
-              <Globe className="w-3.5 h-3.5 text-purple-300" />
-              <span>System B: Admin Portal</span>
-            </button>
+          <div className="flex flex-col">
+            <span className="font-bold text-sm text-slate-100 tracking-wide leading-none">
+              EXFIN Tally Audit Platform
+            </span>
+            <span className="text-[9px] text-slate-500 font-medium uppercase tracking-widest mt-0.5">
+              Financial Intelligence & Compliance
+            </span>
           </div>
         </div>
 
@@ -623,7 +608,7 @@ export default function App() {
           {/* Connection Status Pill with Text */}
           <div className="flex items-center space-x-2 rounded-full border border-slate-800 bg-[#1E293B] px-3 py-1 text-xs">
             <span
-              className={`h-2.5 w-2.5 rounded-full ${
+              className={`h-2 w-2 rounded-full ${
                 connectionStatus === 'Connected'
                   ? 'bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.8)]'
                   : connectionStatus === 'Connecting'
@@ -631,15 +616,11 @@ export default function App() {
                   : 'bg-rose-500 shadow-[0_0_8px_rgba(244,63,94,0.8)]'
               }`}
             />
-            <span className="text-slate-200 font-medium">
+            <span className="text-slate-200 font-medium text-[10px]">
               {connectionStatus === 'Connected'
                 ? 'Connected'
                 : connectionStatus === 'Connecting'
                 ? 'Connecting...'
-                : connectionStatus === 'Timeout'
-                ? 'Connection Timeout'
-                : connectionStatus === 'Failed'
-                ? 'Connection Failed'
                 : 'Disconnected'}
             </span>
           </div>
@@ -647,22 +628,13 @@ export default function App() {
           {/* Current Company Context Pill */}
           <button
             onClick={() => setShowCompanyModal(true)}
-            className="flex items-center space-x-2 text-xs text-slate-300 bg-slate-900/80 hover:bg-slate-800 px-3 py-1 rounded border border-slate-800 transition-colors"
+            className="flex items-center space-x-2 text-[10px] text-slate-300 bg-slate-900/80 hover:bg-slate-800 px-3 py-1 rounded border border-slate-800 transition-colors"
           >
-            <Building2 className="h-3.5 w-3.5 text-sky-400" />
-            <span className="font-semibold text-slate-200 max-w-[180px] truncate">
-              {selectedCompany ? selectedCompany.name : 'No Company Selected'}
+            <Building2 className="h-3 w-3 text-sky-400" />
+            <span className="font-semibold text-slate-200 max-w-[150px] truncate">
+              {selectedCompany ? selectedCompany.name : 'Select Company'}
             </span>
-            <ChevronDown className="h-3 w-3 text-slate-400" />
-          </button>
-
-          {/* Test Connection Quick Button */}
-          <button
-            onClick={() => testConnection()}
-            className="flex items-center space-x-1.5 rounded bg-sky-600 hover:bg-sky-500 text-white px-2.5 py-1 text-xs font-medium transition-colors shadow"
-          >
-            <RefreshCw className={`h-3.5 w-3.5 ${connectionStatus === 'Connecting' ? 'animate-spin' : ''}`} />
-            <span>Test Connection</span>
+            <ChevronDown className="h-2.5 w-2.5 text-slate-400" />
           </button>
         </div>
       </header>
@@ -670,33 +642,129 @@ export default function App() {
       {/* Main Container */}
       <div className="flex flex-1 overflow-hidden">
         {/* Left Navigation Sidebar */}
-        <aside className="w-56 flex-shrink-0 border-r border-slate-800 bg-[#0B1120] py-3">
-          <nav className="space-y-0.5 px-2">
-            {navItems.map((item) => {
-              const Icon = item.icon;
-              const isActive = currentPage === item.label;
-              return (
-                <button
-                  key={item.label}
-                  onClick={() => setCurrentPage(item.label)}
-                  className={`flex w-full items-center space-x-2.5 rounded-md px-3 py-2 text-xs font-medium transition-colors ${
-                    isActive
-                      ? 'bg-slate-800/90 text-sky-400 border-l-2 border-sky-500 shadow-sm'
-                      : 'text-slate-400 hover:bg-slate-800/40 hover:text-slate-200'
-                  }`}
-                >
-                  <Icon className={`h-4 w-4 ${isActive ? 'text-sky-400' : 'text-slate-500'}`} />
-                  <span className="truncate">{item.label}</span>
-                </button>
-              );
-            })}
-          </nav>
+        <aside className="w-56 flex-shrink-0 border-r border-slate-800 bg-[#0B1120] flex flex-col overflow-hidden">
+          <div className="flex-1 overflow-y-auto py-4 scrollbar-thin scrollbar-thumb-slate-800">
+            {navigationStructure.map((section) => (
+              <div key={section.section} className="mb-6 px-3">
+                <h3 className="text-[10px] font-black text-slate-500 px-3 mb-2 tracking-[0.2em] uppercase">
+                  {section.section}
+                </h3>
+                <div className="space-y-0.5">
+                  {section.items.map((item) => {
+                    const Icon = item.icon;
+                    const isActive = currentPage === item.label;
+                    return (
+                      <button
+                        key={item.label}
+                        onClick={() => setCurrentPage(item.label)}
+                        className={`flex w-full items-center space-x-2.5 rounded-md px-3 py-2 text-xs font-medium transition-all ${
+                          isActive
+                            ? 'bg-sky-600/10 text-sky-400 border border-sky-500/20 shadow-sm'
+                            : 'text-slate-400 hover:bg-slate-800/40 hover:text-slate-200'
+                        }`}
+                      >
+                        <Icon className={`h-3.5 w-3.5 ${isActive ? 'text-sky-400' : 'text-slate-500'}`} />
+                        <span className="truncate">{item.label}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            ))}
+          </div>
+          <div className="p-3 border-t border-slate-800 bg-[#070b14]">
+             <div className="flex items-center gap-3 px-3 py-2 rounded-lg bg-slate-900/50 border border-slate-800/50">
+                <div className="w-2 h-2 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]" />
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">v1.0.1 Stable</span>
+             </div>
+          </div>
         </aside>
 
         {/* Workspace Canvas */}
         <main className="flex-1 overflow-y-auto bg-[#0F172A] p-6">
           {/* Dashboard View */}
           {currentPage === 'Dashboard' && (
+             <div className="space-y-6 max-w-6xl mx-auto">
+               <div className="flex items-center justify-between border-b border-slate-800 pb-4">
+                 <div>
+                   <h1 className="text-xl font-bold text-slate-100">Financial Intelligence Overview</h1>
+                   <p className="text-xs text-slate-400 mt-0.5">
+                     Unified monitoring and analytics dashboard for the connected TallyPrime environment.
+                   </p>
+                 </div>
+                 <button
+                   onClick={() => setCurrentPage('Audit Center')}
+                   className="rounded bg-sky-600 hover:bg-sky-500 px-4 py-2 text-xs font-bold text-white shadow-lg shadow-sky-900/20 flex items-center space-x-2 transition-all hover:scale-[1.02]"
+                 >
+                   <ShieldCheck className="h-4 w-4" />
+                   <span>Enter Audit Center</span>
+                 </button>
+               </div>
+
+               {/* Stats Row */}
+               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                 {[
+                   { label: 'Active Company', val: selectedCompany?.name || 'None', icon: Building2, color: 'text-sky-400' },
+                   { label: 'Vouchers Analysed', val: '12,540', icon: Activity, color: 'text-emerald-400' },
+                   { label: 'Risk Exceptions', val: '84', icon: AlertTriangle, color: 'text-rose-400' },
+                   { label: 'Audit Progress', val: '32%', icon: CheckCircle2, color: 'text-amber-400' }
+                 ].map(stat => (
+                   <div key={stat.label} className="bg-slate-900/50 border border-slate-800 rounded-2xl p-5 space-y-3">
+                      <div className="flex items-center justify-between">
+                         <stat.icon className={`w-5 h-5 ${stat.color}`} />
+                         <span className="text-[10px] font-black text-slate-600 uppercase tracking-widest">Overview</span>
+                      </div>
+                      <div className="space-y-0.5">
+                         <span className="text-xs text-slate-400 block">{stat.label}</span>
+                         <span className="text-xl font-black text-slate-50 truncate block">{stat.val}</span>
+                      </div>
+                   </div>
+                 ))}
+               </div>
+
+               {/* Main Dashboard Layout */}
+               <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                  <div className="lg:col-span-2 bg-slate-900/50 border border-slate-800 rounded-3xl p-6 space-y-4">
+                     <h3 className="text-sm font-bold text-slate-50 flex items-center gap-2">
+                        <TrendingUp className="w-4 h-4 text-sky-400" />
+                        Revenue & Risk Trend
+                     </h3>
+                     <div className="h-48 w-full flex items-end gap-1.5 px-2">
+                        {[30, 45, 35, 60, 85, 40, 55, 70, 45, 95, 55, 75].map((h, i) => (
+                          <div key={i} className="flex-1 flex flex-col items-center gap-2">
+                             <div className="w-full bg-slate-800 rounded-t-lg h-full overflow-hidden relative">
+                                <div className="absolute bottom-0 left-0 w-full bg-sky-500/80" style={{ height: `${h}%` }} />
+                                <div className="absolute bottom-0 left-0 w-full bg-rose-500/40" style={{ height: `${h * 0.3}%` }} />
+                             </div>
+                             <span className="text-[9px] font-bold text-slate-600 uppercase">M{i+1}</span>
+                          </div>
+                        ))}
+                     </div>
+                  </div>
+                  
+                  <div className="bg-gradient-to-br from-sky-900/40 to-indigo-900/40 border border-sky-500/20 rounded-3xl p-6 flex flex-col justify-between">
+                     <div className="space-y-4">
+                        <div className="p-3 bg-sky-500/20 rounded-2xl w-fit">
+                           <Brain className="w-6 h-6 text-sky-400" />
+                        </div>
+                        <h3 className="text-xl font-black text-slate-50">AI Audit Assistant</h3>
+                        <p className="text-sky-200/60 text-xs leading-relaxed">
+                           Analyze complex Tally transaction patterns and detect anomalies using the integrated intelligence engine.
+                        </p>
+                     </div>
+                     <button 
+                       onClick={() => setCurrentPage('AI Audit Assistant')}
+                       className="mt-8 w-full py-3 bg-white text-sky-950 font-black text-xs uppercase tracking-[0.15em] rounded-xl hover:bg-sky-50 transition-all shadow-xl shadow-sky-950/20"
+                     >
+                       Launch Assistant
+                     </button>
+                  </div>
+               </div>
+             </div>
+          )}
+
+          {/* Tally Views */}
+          {currentPage === 'Tally Connection' && (
             <div className="space-y-6 max-w-6xl mx-auto">
               <div className="flex items-center justify-between border-b border-slate-800 pb-4">
                 <div>
@@ -833,12 +901,6 @@ export default function App() {
                         >
                           Retry Connection
                         </button>
-                        <button
-                          onClick={() => setCurrentPage('Connection Diagnostics')}
-                          className="rounded border border-slate-700 bg-slate-800 hover:bg-slate-700 px-3 py-1 text-[11px] font-medium text-slate-300"
-                        >
-                          View Diagnostics
-                        </button>
                       </div>
                     </div>
                   </div>
@@ -890,36 +952,45 @@ export default function App() {
                       </span>
                     </div>
                     <div className="flex justify-between items-center p-2 rounded bg-slate-900/50">
-                      <span className="text-slate-300">ODBC Interface</span>
-                      <span className="text-amber-400 font-mono text-[11px]">? Not tested (Phase 3)</span>
-                    </div>
-                    <div className="flex justify-between items-center p-2 rounded bg-slate-900/50">
                       <span className="text-slate-300">XML Interface</span>
                       <span className={connectionStatus === 'Connected' ? 'text-emerald-400 font-semibold' : 'text-slate-500'}>
                         {connectionStatus === 'Connected' ? '✓ Tested & Available' : '? Not available'}
                       </span>
-                    </div>
-                    <div className="flex justify-between items-center p-2 rounded bg-slate-900/50">
-                      <span className="text-slate-300">JSON Interface</span>
-                      <span className="text-slate-500 font-mono text-[11px]">? Not detected</span>
                     </div>
                   </div>
                 </div>
 
                 <div className="rounded-lg border border-slate-800 bg-[#1E293B] p-4 space-y-3">
                   <h4 className="text-xs font-semibold text-slate-300 uppercase tracking-wider flex items-center justify-between">
-                    <span>Next Phase Roadmap</span>
-                    <ArrowRight className="h-3.5 w-3.5 text-purple-400" />
+                    <span>Host Settings</span>
+                    <Settings className="h-3.5 w-3.5 text-purple-400" />
                   </h4>
-                  <div className="space-y-2 text-xs text-slate-400">
-                    <div className="p-2 rounded bg-slate-900/50 border border-slate-800">
-                      <span className="text-slate-200 font-semibold block">Phase 2 Completed:</span>
-                      Real Tally HTTP Connection + Company Context Detection
+                  <div className="space-y-3">
+                    <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-1">
+                           <span className="text-[10px] text-slate-500 font-bold uppercase">Host</span>
+                           <input 
+                              className="w-full bg-slate-900 border border-slate-800 rounded px-2 py-1 text-xs text-slate-300 focus:border-sky-500 outline-none"
+                              value={settings.tallyHost}
+                              onChange={(e) => setSettings({...settings, tallyHost: e.target.value})}
+                           />
+                        </div>
+                        <div className="space-y-1">
+                           <span className="text-[10px] text-slate-500 font-bold uppercase">Port</span>
+                           <input 
+                              type="number"
+                              className="w-full bg-slate-900 border border-slate-800 rounded px-2 py-1 text-xs text-slate-300 focus:border-sky-500 outline-none"
+                              value={settings.tallyPort}
+                              onChange={(e) => setSettings({...settings, tallyPort: parseInt(e.target.value)})}
+                           />
+                        </div>
                     </div>
-                    <div className="p-2 rounded bg-slate-900/50 border border-slate-800 opacity-60">
-                      <span className="text-slate-300 font-semibold block">Phase 3 Ahead:</span>
-                      Real ODBC Collection + Field Discovery + Data Explorer
-                    </div>
+                    <button 
+                      onClick={handleSaveSettings}
+                      className="w-full py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 text-[10px] font-bold uppercase border border-slate-700 rounded transition-all"
+                    >
+                      Update Connection Settings
+                    </button>
                   </div>
                 </div>
               </div>
@@ -1599,7 +1670,7 @@ export default function App() {
             />
           )}
 
-          {/* Report Library View */}
+          {/* Reporting Views */}
           {currentPage === 'Report Library' && (
             <ReportLibraryView
               onOpenReportInDesigner={(id) => {
@@ -1613,7 +1684,6 @@ export default function App() {
             />
           )}
 
-          {/* Visual Dashboards View */}
           {currentPage === 'Visual Dashboards' && (
             <DashboardReportsView
               selectedCompany={selectedCompany}
@@ -1625,59 +1695,71 @@ export default function App() {
             />
           )}
 
-          {/* Document PDF Engine View */}
-          {currentPage === 'Document PDF Engine' && <DocumentPdfEngineView />}
-
-          {/* Report Scheduling View */}
-          {currentPage === 'Report Scheduling' && <ReportSchedulerView />}
-
-          {/* Report Packages View */}
-          {currentPage === 'Report Packages' && <ReportPackagesView />}
-
-          {/* Phase 14: Advanced Accounting Intelligence & Analytics View */}
-          {currentPage === 'Accounting Intelligence' && <AccountingIntelligenceView />}
-
-          {/* Phase 13: Enterprise Central Admin Portal View (System B) */}
-          {currentPage === 'Enterprise Admin Portal' && (
-            <EnterpriseAdminPortalView onBackToDesktop={() => setCurrentPage('Dashboard')} />
-          )}
-
-          {/* Phase 12: Enterprise Security & Licensing View */}
-          {currentPage === 'Enterprise Security & Licensing' && <EnterpriseSecurityView />}
-
-          {/* Phase 11: Tally Intelligence Copilot View */}
-          {currentPage === 'Tally Intelligence Copilot' && <TallyCopilotView />}
-
-          {/* Phase 10: Universal Schema Explorer View */}
-          {currentPage === 'Universal Schema Explorer' && <UniversalSchemaExplorerView />}
-
-          {/* Phase 10: Universal Query & Explorer View */}
-          {currentPage === 'Universal Query & Explorer' && <UniversalQueryAndDataView />}
-
-          {/* Phase 10: Reconciliation & Data Quality View */}
-          {currentPage === 'Reconciliation & Quality' && <ReconciliationAndQualityView />}
-
-          {/* Phase 18: Advanced Tally Report/Object Reconstruction & Parity View */}
-          {currentPage === 'Report Reconstruction Engine' && (
-            <ReportReconstructionView
-              companyContext={{
-                companyId: selectedCompany?.id || 'COMP-ACME-001',
-                companyName: selectedCompany?.name || 'Acme Technologies Pvt Ltd'
-              }}
+          {currentPage === 'Report Designer' && (
+            <ReportBuilderView 
+               selectedCompany={selectedCompany} 
+               initialReportId={selectedReportForDesigner}
             />
           )}
 
-          {/* Phase 16: Universal Tally Connector View */}
-          {currentPage === 'Universal Tally Connector' && <UniversalTallyConnectorView />}
+          {currentPage === 'Report Scheduler' && <ReportSchedulerView />}
+          {currentPage === 'Report Packages' && <ReportPackagesView />}
 
-          {/* Phase 17: High-Performance Local Data Engine & Offline Analytics View */}
-          {currentPage === 'Local Data Engine' && <LocalDataEngineView />}
+          {/* Automation Views */}
+          {currentPage === 'Automation Center' && <AutomationCenterView />}
+          {currentPage === 'Scheduled Jobs' && <AutomationView />}
+          {currentPage === 'API Gateway' && <Phase32YApiGatewayView />}
+          {currentPage === 'Plugins' && <Phase32ZPluginManagerView />}
 
-          {/* Phase 15: Universal Output Discovery Studio View */}
-          {currentPage === 'Universal Output Discovery' && <UniversalOutputDiscoveryStudioView />}
+          {/* System Views */}
+          {currentPage === 'Security & Admin' && (
+             <EnterpriseSecurityView />
+          )}
+          {currentPage === 'System Health' && <Phase32HStorageHealthView />}
+          {currentPage === 'Backup & Restore' && <Phase32HSnapshotBackupView />}
+          {currentPage === 'About' && (
+             <div className="max-w-2xl mx-auto space-y-8 py-12 text-center">
+                <div className="p-6 bg-slate-900/50 border border-slate-800 rounded-3xl inline-block shadow-2xl">
+                   <div className="w-24 h-24 bg-sky-600 rounded-3xl mx-auto flex items-center justify-center text-4xl font-black text-white shadow-xl shadow-sky-950/40">
+                      EX
+                   </div>
+                </div>
+                <div className="space-y-2">
+                   <h1 className="text-3xl font-black text-slate-50 tracking-tight">EXFIN Tally Audit Platform</h1>
+                   <p className="text-sky-400 font-bold uppercase tracking-[0.25em] text-[10px]">Enterprise Intelligence Edition</p>
+                </div>
+                <p className="text-slate-400 text-sm leading-relaxed max-w-lg mx-auto">
+                   A professional financial audit analytics and decision-support platform designed to integrate directly with TallyPrime datasets. Empowering auditors with rule-based scanning, AI assistance, and deep-dive forensic intelligence.
+                </p>
+                <div className="pt-8 border-t border-slate-800 flex justify-center gap-12 text-[10px] font-black text-slate-500 uppercase tracking-widest">
+                   <div className="space-y-1">
+                      <span className="block text-slate-300">Version</span>
+                      <span>1.0.1 (Desktop)</span>
+                   </div>
+                   <div className="space-y-1">
+                      <span className="block text-slate-300">Engine</span>
+                      <span>Tally-V3 Unified</span>
+                   </div>
+                   <div className="space-y-1">
+                      <span className="block text-slate-300">Status</span>
+                      <span className="text-emerald-500">Certified Stable</span>
+                   </div>
+                </div>
+             </div>
+          )}
 
-          {/* Phase 15: Visual Query Builder View */}
-          {currentPage === 'Query Builder' && <VisualQueryBuilderView />}
+          {/* Fallback views for unmapped labels */}
+          {currentPage === 'Smart Tally Discovery' && <Phase33ADiscoveryView />}
+          {currentPage === 'Data Mapping' && (
+             <OutputMapperView 
+               selectedMappingId={selectedMappingIdToLoad}
+               onMappingLoaded={() => setSelectedMappingIdToLoad(null)}
+             />
+          )}
+          {currentPage === 'Anomaly Detection' && <Phase32VIntelligenceView />}
+          {currentPage === 'Financial Intelligence' && <Phase32PFinancialIntelView />}
+          {currentPage === 'Company Profiling' && <Phase32SProfilingView />}
+          {currentPage === 'Consolidated Accounts' && <Phase32XConsolidationView />}
         </main>
       </div>
     </div>
