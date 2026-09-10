@@ -13,7 +13,7 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Setup Node.js 24
         uses: actions/setup-node@v7
@@ -28,7 +28,7 @@ jobs:
         run: npm run dist -- --publish never
 
       - name: Upload artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: windows-installer
           path: release/*.exe
