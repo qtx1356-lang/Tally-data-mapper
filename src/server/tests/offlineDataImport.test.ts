@@ -303,6 +303,56 @@ export async function runOfflineDataImportTests(): Promise<{
     );
 
     // =========================================================================
+    // Test 10: Disk-Based Large File Parsing & Temporary Disk Handling
+    // =========================================================================
+    const tempTestFile = path.join(testStorageDir, 'large_sample_daybook.json');
+    const largeDayBookData = {
+      DayBook: Array.from({ length: 500 }, (_, i) => ({
+        VOUCHERNUMBER: `DB-VCH-${1000 + i}`,
+        VOUCHERTYPENAME: i % 2 === 0 ? 'Sales' : 'Payment',
+        DATE: '2024-06-15',
+        PARTYLEDGERNAME: `Party Customer ${i}`,
+        AMOUNT: 15000 + i * 50,
+        ALLLEDGERENTRIES: {
+          LEDGERENTRIES: [
+            { LEDGERNAME: `Party Customer ${i}`, AMOUNT: -(15000 + i * 50) },
+            { LEDGERNAME: 'Sales Account', AMOUNT: 15000 + i * 50 }
+          ]
+        }
+      }))
+    };
+    fs.writeFileSync(tempTestFile, JSON.stringify(largeDayBookData, null, 2), 'utf8');
+
+    const diskParsed = engine.parseFileFromDisk(tempTestFile, 'JSON', 'DayBook.json');
+
+    assert(
+      'Disk-Based Parsing - Large DayBook JSON Structure',
+      diskParsed.rawRecords.vouchers.length === 500 &&
+      diskParsed.preview.fileSize > 0,
+      `Extracted ${diskParsed.rawRecords.vouchers.length} vouchers from disk-based DayBook JSON`
+    );
+
+    // =========================================================================
+    // Test 11: Direct Commit from Disk-Parsed Records with Zero Fabrication
+    // =========================================================================
+    const diskMappings = engine.generateAutoMappings(diskParsed.rawRecords);
+    const diskCommitted = engine.commitDataset(
+      'DayBook.json',
+      'JSON',
+      diskParsed.preview.fileSize,
+      diskParsed.rawRecords,
+      diskMappings
+    );
+
+    assert(
+      'Large Dataset Persistence & Source Traceability Verification',
+      diskCommitted.vouchers.length === 500 &&
+      diskCommitted.vouchers[0].traceability.sourceFileType === 'JSON' &&
+      diskCommitted.vouchers[0].traceability.sourceFile === 'DayBook.json',
+      `Committed dataset contains ${diskCommitted.vouchers.length} vouchers with verified source traceability`
+    );
+
+    // =========================================================================
     // Cleanup temporary test files
     // =========================================================================
     try {

@@ -54,8 +54,25 @@ async function startServer() {
   const app = express();
   const PORT = 3000;
 
-  app.use(express.json({ limit: "50mb" }));
-  app.use(express.urlencoded({ limit: "50mb", extended: true }));
+  app.use(express.json({ limit: "100mb" }));
+  app.use(express.urlencoded({ limit: "100mb", extended: true }));
+
+  // Centralized body parser error handling middleware to ensure pure JSON responses
+  app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
+    if (err) {
+      const status = err.status || err.statusCode || (err.type === 'entity.too.large' ? 413 : 400);
+      if (req.path.startsWith('/api') || req.headers.accept?.includes('application/json')) {
+        return res.status(status).json({
+          success: false,
+          error: err.type === 'entity.too.large'
+            ? 'Request payload exceeded JSON body parser limit. Please use multipart streaming upload (/api/import/upload-and-parse) for large datasets.'
+            : (err.message || 'Malformed request body'),
+          code: err.type === 'entity.too.large' ? 'PAYLOAD_TOO_LARGE' : (err.code || 'REQUEST_BODY_ERROR')
+        });
+      }
+    }
+    next(err);
+  });
 
   // Offline Data Import & Dataset API
   app.use("/api/import", offlineDataImportRouter);

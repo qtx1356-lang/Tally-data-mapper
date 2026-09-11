@@ -73,10 +73,21 @@ export const ImportTallyDataView: React.FC<ImportTallyDataViewProps> = ({
   // Source Traceability Inspector Modal
   const [traceabilityModalData, setTraceabilityModalData] = useState<SourceTraceability | null>(null);
 
+  // Upload Progress State
+  const [uploadProgress, setUploadProgress] = useState<number | null>(null);
+
   // Deletion Confirmation Modal
   const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Helper to format file sizes accurately
+  const formatFileSize = (bytes: number): string => {
+    if (!bytes || bytes === 0) return '0 B';
+    if (bytes < 1024) return bytes + ' B';
+    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+    return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+  };
 
   // Load datasets on mount
   useEffect(() => {
@@ -142,12 +153,12 @@ export const ImportTallyDataView: React.FC<ImportTallyDataViewProps> = ({
       setSelectedFormat('XML');
     } else if (name.endsWith('.json')) {
       setSelectedFormat('JSON');
-    } else if (name.endsWith('.xlsx') || name.endsWith('.xls')) {
+    } else if (name.endsWith('.xlsx') || name.endsWith('.xls') || name.endsWith('.csv')) {
       setSelectedFormat('EXCEL');
     }
   };
 
-  // Process and Parse File
+  // Process and Parse File via Multipart Streaming (Handles 100MB+ files without memory limits)
   const handleParseFile = async () => {
     if (!file) {
       setErrorMessage('Please select a file to import');
@@ -155,83 +166,78 @@ export const ImportTallyDataView: React.FC<ImportTallyDataViewProps> = ({
     }
 
     setIsLoading(true);
-    setLoadingMessage('Parsing file contents and extracting Tally entities...');
+    setUploadProgress(0);
+    setLoadingMessage(`Uploading ${file.name} (${formatFileSize(file.size)})...`);
     setErrorMessage(null);
 
     try {
-      if (selectedFormat === 'EXCEL') {
-        const reader = new FileReader();
-        reader.onload = async (e) => {
-          const buffer = e.target?.result as ArrayBuffer;
-          const bytes = new Uint8Array(buffer);
-          let binary = '';
-          for (let i = 0; i < bytes.byteLength; i++) {
-            binary += String.fromCharCode(bytes[i]);
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('fileType', selectedFormat);
+      formData.append('fileName', file.name);
+
+      const xhr = new XMLHttpRequest();
+      xhr.open('POST', '/api/import/upload-and-parse', true);
+
+      xhr.upload.onprogress = (e) => {
+        if (e.lengthComputable) {
+          const percent = Math.round((e.loaded / e.total) * 100);
+          setUploadProgress(percent);
+          if (percent < 100) {
+            setLoadingMessage(`Uploading ${file.name} (${formatFileSize(e.loaded)} / ${formatFileSize(e.total)} - ${percent}%)...`);
+          } else {
+            setLoadingMessage('Upload complete. Parsing and validating Tally entities from disk...');
           }
-          const base64 = btoa(binary);
+        }
+      };
 
-          await sendParseRequest({
-            fileType: 'EXCEL',
-            fileName: file.name,
-            base64Buffer: base64
-          });
-        };
-        reader.readAsArrayBuffer(file);
-      } else {
-        const reader = new FileReader();
-        reader.onload = async (e) => {
-          const text = e.target?.result as string;
-          await sendParseRequest({
-            fileType: selectedFormat,
-            fileName: file.name,
-            fileContent: text
-          });
-        };
-        reader.readAsText(file);
-      }
+      xhr.onload = () => {
+        setIsLoading(false);
+        setUploadProgress(null);
+
+        let data: any = null;
+        try {
+          data = JSON.parse(xhr.responseText);
+        } catch (parseErr) {
+          setErrorMessage(`Server response error (${xhr.status}): Expected JSON response but received unexpected format.`);
+          return;
+        }
+
+        if (xhr.status >= 200 && xhr.status < 300 && data.success) {
+          setParsedPreview(data.preview);
+          setRawRecords(data.rawRecords);
+          setMappings(data.mappings || []);
+          setQualityReport(data.qualityReport || null);
+
+          // Pre-fill company name and FY if detected
+          if (data.preview?.detectedCompany) {
+            setOverrideCompany(data.preview.detectedCompany);
+          } else {
+            setOverrideCompany(file ? file.name.replace(/\.[^/.]+$/, '') : 'Imported Company');
+          }
+
+          if (data.preview?.detectedFinancialYear?.isDetected) {
+            setOverrideFyFrom(data.preview.detectedFinancialYear.from || '2024-04-01');
+            setOverrideFyTo(data.preview.detectedFinancialYear.to || '2025-03-31');
+          }
+
+          setCurrentStep(2);
+        } else {
+          setErrorMessage(data?.error || `Failed to parse file (Status ${xhr.status})`);
+        }
+      };
+
+      xhr.onerror = () => {
+        setIsLoading(false);
+        setUploadProgress(null);
+        setErrorMessage('Network error occurred during streaming upload. Please check connectivity and try again.');
+      };
+
+      xhr.send(formData);
     } catch (err: any) {
       setIsLoading(false);
-      setErrorMessage(`Parsing error: ${err.message}`);
-    }
-  };
-
-  const sendParseRequest = async (payload: any) => {
-    try {
-      const res = await fetch('/api/import/parse', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-      });
-
-      const data = await res.json();
-      setIsLoading(false);
-
-      if (!data.success) {
-        setErrorMessage(data.error || 'Failed to parse file.');
-        return;
-      }
-
-      setParsedPreview(data.preview);
-      setRawRecords(data.rawRecords);
-      setMappings(data.mappings || []);
-      setQualityReport(data.qualityReport || null);
-
-      // Pre-fill company name and FY if detected
-      if (data.preview?.detectedCompany) {
-        setOverrideCompany(data.preview.detectedCompany);
-      } else {
-        setOverrideCompany(file ? file.name.replace(/\.[^/.]+$/, '') : 'Imported Company');
-      }
-
-      if (data.preview?.detectedFinancialYear?.isDetected) {
-        setOverrideFyFrom(data.preview.detectedFinancialYear.from || '2024-04-01');
-        setOverrideFyTo(data.preview.detectedFinancialYear.to || '2025-03-31');
-      }
-
-      setCurrentStep(2);
-    } catch (err: any) {
-      setIsLoading(false);
-      setErrorMessage(`Server communication error: ${err.message}`);
+      setUploadProgress(null);
+      setErrorMessage(`Upload error: ${err.message}`);
     }
   };
 
@@ -545,16 +551,27 @@ export const ImportTallyDataView: React.FC<ImportTallyDataViewProps> = ({
                   {file ? file.name : 'Click to browse or drag and drop your file here'}
                 </div>
                 <div className="text-xs text-slate-400 mt-1">
-                  Supports Tally XML (.xml), JSON (.json), and Excel (.xlsx, .xls) up to 50MB
+                  Supports Tally XML (.xml), JSON (.json), and Excel (.xlsx, .xls) up to 500MB with streaming upload
                 </div>
               </div>
 
               {file && (
-                <div className="flex items-center space-x-2 text-xs font-mono text-emerald-400 bg-emerald-950/40 border border-emerald-800/60 px-3 py-1.5 rounded-lg mt-2">
-                  <CheckCircle2 className="h-4 w-4" />
-                  <span>
-                    Selected: {file.name} ({(file.size / 1024).toFixed(1)} KB)
-                  </span>
+                <div className="flex flex-col items-center space-y-2 mt-2">
+                  <div className="flex items-center space-x-2 text-xs font-mono text-emerald-400 bg-emerald-950/40 border border-emerald-800/60 px-3.5 py-1.5 rounded-lg">
+                    <CheckCircle2 className="h-4 w-4" />
+                    <span>
+                      Selected: {file.name} ({formatFileSize(file.size)})
+                    </span>
+                  </div>
+
+                  {uploadProgress !== null && (
+                    <div className="w-full max-w-md bg-slate-800 rounded-full h-2.5 overflow-hidden border border-slate-700 mt-2">
+                      <div
+                        className="bg-sky-500 h-2.5 rounded-full transition-all duration-300"
+                        style={{ width: `${uploadProgress}%` }}
+                      />
+                    </div>
+                  )}
                 </div>
               )}
             </div>
