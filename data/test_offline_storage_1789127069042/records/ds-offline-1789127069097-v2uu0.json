@@ -1,0 +1,206 @@
+{
+  "id": "ds-offline-1789127069097-v2uu0",
+  "metadata": {
+    "id": "ds-offline-1789127069097-v2uu0",
+    "name": "Cash Flow Ltd (JSON)",
+    "description": "Imported from high_val.json with 1 vouchers and 0 masters.",
+    "sourceFileName": "high_val.json",
+    "sourceFileType": "JSON",
+    "sourceFileSize": 288,
+    "companyName": "Cash Flow Ltd",
+    "financialYearFrom": null,
+    "financialYearTo": null,
+    "isFinancialYearDetected": false,
+    "financialYearStatus": "REVIEW_REQUIRED",
+    "financialYearExplanation": "Financial year was not detected in the source data.",
+    "financialYearDetectionSource": "Not Detected in Source Data",
+    "importedAt": "2026-09-11T11:44:29.097Z",
+    "totalRecords": 1,
+    "masterCounts": {
+      "ledgers": 0,
+      "groups": 0,
+      "parties": 0,
+      "stockItems": 0,
+      "costCentres": 0,
+      "bankAccounts": 0
+    },
+    "voucherCounts": {
+      "total": 1,
+      "sales": 0,
+      "purchase": 0,
+      "payment": 1,
+      "receipt": 0,
+      "journal": 0,
+      "contra": 0,
+      "other": 0
+    },
+    "dataQualityScore": 100,
+    "dataQualityReport": {
+      "score": 100,
+      "totalRecordsChecked": 1,
+      "passedRecords": 1,
+      "duplicateVouchers": 0,
+      "missingDates": 0,
+      "invalidAmounts": 0,
+      "unbalancedVouchers": 0,
+      "orphanLedgers": 0,
+      "unmappedFieldsCount": 0,
+      "reviewRequiredFieldsCount": 0,
+      "warnings": [],
+      "errors": [],
+      "recommendations": []
+    },
+    "status": "Ready",
+    "mappingsCount": {
+      "total": 0,
+      "mapped": 0,
+      "reviewRequired": 0,
+      "unmapped": 0
+    },
+    "isActive": true,
+    "isDemoData": false
+  },
+  "companies": [
+    {
+      "name": "Cash Flow Ltd",
+      "financialYearFrom": null,
+      "financialYearTo": null,
+      "id": "ds-offline-1789127069097-v2uu0"
+    }
+  ],
+  "groups": [],
+  "ledgers": [],
+  "parties": [],
+  "vouchers": [
+    {
+      "id": "JSON-V-1",
+      "voucherNumber": "PAY-HIGH-01",
+      "voucherType": "Payment",
+      "date": "2024-08-10",
+      "partyLedger": "Vendor Super",
+      "amount": 250000,
+      "totalDebit": 250000,
+      "totalCredit": 250000,
+      "difference": 0,
+      "isBalanced": true,
+      "narration": null,
+      "entries": [
+        {
+          "id": "line-json-1-1",
+          "ledgerName": "Vendor Super",
+          "amount": 250000,
+          "isDebit": true,
+          "isDeemedPositive": null,
+          "rawAmount": 250000,
+          "sourceAmount": 250000,
+          "normalizedAmount": 250000,
+          "direction": "Debit",
+          "ruleApplied": "Explicit isDebit source field resolved to true (Debit)",
+          "reviewRequired": false,
+          "traceability": {
+            "sourceFileType": "JSON",
+            "sourceFile": "high_val.json",
+            "jsonPath": "$.vouchers[0].entries[0]",
+            "sourceField": "Vendor Super"
+          }
+        },
+        {
+          "id": "line-json-1-2",
+          "ledgerName": "Cash",
+          "amount": 250000,
+          "isDebit": false,
+          "isDeemedPositive": null,
+          "rawAmount": 250000,
+          "sourceAmount": 250000,
+          "normalizedAmount": 250000,
+          "direction": "Credit",
+          "ruleApplied": "Explicit isDebit source field resolved to false (Credit)",
+          "reviewRequired": false,
+          "traceability": {
+            "sourceFileType": "JSON",
+            "sourceFile": "high_val.json",
+            "jsonPath": "$.vouchers[0].entries[1]",
+            "sourceField": "Cash"
+          }
+        }
+      ],
+      "reviewRequired": false,
+      "reviewReasons": [],
+      "sourceFile": "high_val.json",
+      "datasetId": "ds-offline-1789127069097-v2uu0",
+      "traceability": {
+        "sourceFileType": "JSON",
+        "sourceFile": "high_val.json",
+        "jsonPath": "$.vouchers[0]",
+        "sourceField": "PAY-HIGH-01"
+      }
+    }
+  ],
+  "voucherLines": [
+    {
+      "id": "line-json-1-1",
+      "ledgerName": "Vendor Super",
+      "amount": 250000,
+      "isDebit": true,
+      "isDeemedPositive": null,
+      "rawAmount": 250000,
+      "sourceAmount": 250000,
+      "normalizedAmount": 250000,
+      "direction": "Debit",
+      "ruleApplied": "Explicit isDebit source field resolved to true (Debit)",
+      "reviewRequired": false,
+      "traceability": {
+        "sourceFileType": "JSON",
+        "sourceFile": "high_val.json",
+        "jsonPath": "$.vouchers[0].entries[0]",
+        "sourceField": "Vendor Super"
+      }
+    },
+    {
+      "id": "line-json-1-2",
+      "ledgerName": "Cash",
+      "amount": 250000,
+      "isDebit": false,
+      "isDeemedPositive": null,
+      "rawAmount": 250000,
+      "sourceAmount": 250000,
+      "normalizedAmount": 250000,
+      "direction": "Credit",
+      "ruleApplied": "Explicit isDebit source field resolved to false (Credit)",
+      "reviewRequired": false,
+      "traceability": {
+        "sourceFileType": "JSON",
+        "sourceFile": "high_val.json",
+        "jsonPath": "$.vouchers[0].entries[1]",
+        "sourceField": "Cash"
+      }
+    }
+  ],
+  "stockItems": [],
+  "costCentres": [],
+  "taxRecords": [],
+  "bankAccounts": [],
+  "exceptions": [
+    {
+      "id": "EXC-ds-offline-1789127069097-v2uu0-1",
+      "risk": "HIGH",
+      "riskScore": 88,
+      "date": "2024-08-10",
+      "voucherNo": "PAY-HIGH-01",
+      "voucherType": "Payment",
+      "ledger": "Vendor Super",
+      "party": "Vendor Super",
+      "amount": 250000,
+      "exceptionType": "Potential High-Value Transaction",
+      "reason": "Potential high-value transaction — review applicability of relevant tax provisions based on transaction nature, aggregation and payment/receipt context.",
+      "status": "Pending",
+      "traceability": {
+        "sourceFileType": "JSON",
+        "sourceFile": "high_val.json",
+        "jsonPath": "$.vouchers[0]",
+        "sourceField": "PAY-HIGH-01"
+      }
+    }
+  ],
+  "mappings": []
+}

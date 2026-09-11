@@ -341,9 +341,11 @@ export default function App() {
           const meta = data.activeDataset.metadata || data.activeDataset;
           setActiveOfflineDataset(meta);
           setSelectedCompany({
-            name: meta.companyName || 'Apex Global Trading',
-            startingFrom: meta.financialYearFrom || '2024-04-01',
-            endingAt: meta.financialYearTo || '2025-03-31',
+            name: meta.companyName || 'Offline Dataset',
+            startingFrom: meta.financialYearFrom || '',
+            endingAt: meta.financialYearTo || '',
+            financialYearFrom: meta.financialYearFrom || undefined,
+            financialYearTo: meta.financialYearTo || undefined,
             isActive: true
           });
         }
@@ -857,9 +859,11 @@ export default function App() {
                 setActiveOfflineDataset(ds);
                 setDataSourceMode('OFFLINE_DATASET');
                 setSelectedCompany({
-                  name: ds.companyName || 'Apex Global Trading',
-                  startingFrom: ds.financialYearFrom || '2024-04-01',
-                  endingAt: ds.financialYearTo || '2025-03-31',
+                  name: ds.companyName || 'Offline Dataset',
+                  startingFrom: ds.financialYearFrom || '',
+                  endingAt: ds.financialYearTo || '',
+                  financialYearFrom: ds.financialYearFrom || undefined,
+                  financialYearTo: ds.financialYearTo || undefined,
                   isActive: true
                 });
                 fetchOfflineDatasets();
@@ -1023,7 +1027,13 @@ export default function App() {
                     <div>
                       <h3 className="text-sm font-bold text-slate-100">{selectedCompany.name}</h3>
                       <p className="text-xs text-slate-400">
-                        Financial Year: <span className="text-slate-200 font-mono">{selectedCompany.financialYearFrom || '01-04-2026'} → {selectedCompany.financialYearTo || '31-03-2027'}</span>
+                        Financial Year: <span className="text-slate-200 font-mono">
+                          {(selectedCompany.financialYearFrom && selectedCompany.financialYearTo)
+                            ? `${selectedCompany.financialYearFrom} → ${selectedCompany.financialYearTo}`
+                            : (selectedCompany.startingFrom && selectedCompany.endingAt)
+                              ? `${selectedCompany.startingFrom} → ${selectedCompany.endingAt}`
+                              : 'Not Specified'}
+                        </span>
                       </p>
                     </div>
                   </div>

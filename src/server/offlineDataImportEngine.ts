@@ -30,6 +30,32 @@ import {
   SourceTraceability
 } from '../types/offlineDataImport';
 import { OfflineDatasetStorage } from './offlineDatasetStorage';
+import {
+  AccountingDirection,
+  DebitCreditNormalizationInput,
+  DebitCreditNormalizationResult,
+  normalizeDebitCredit,
+  parseExplicitBoolean,
+  parseNumericMagnitude,
+  parseRawSignedNumber
+} from './debitCreditNormalization';
+import { StreamingJsonParser, StreamingParseResult } from './streamingJsonParser';
+
+export const LARGE_FILE_THRESHOLD_BYTES = 10 * 1024 * 1024; // 10 MB threshold for incremental streaming
+export const STREAMING_SIZE_THRESHOLD_BYTES = 10 * 1024 * 1024; // 10 MB threshold for incremental streaming commit
+
+export type {
+  AccountingDirection,
+  DebitCreditNormalizationInput,
+  DebitCreditNormalizationResult
+};
+export {
+  StreamingJsonParser,
+  normalizeDebitCredit,
+  parseExplicitBoolean,
+  parseNumericMagnitude,
+  parseRawSignedNumber
+};
 
 export class OfflineDataImportEngine {
   private storage: OfflineDatasetStorage;
@@ -37,6 +63,17 @@ export class OfflineDataImportEngine {
   constructor(customStorageDir?: string) {
     this.storage = new OfflineDatasetStorage(customStorageDir);
     this.ensureDefaultSampleIfEmpty();
+  }
+
+  public getStorage(): OfflineDatasetStorage {
+    return this.storage;
+  }
+
+  /**
+   * Centralized Debit/Credit Normalization helper
+   */
+  public normalizeDebitCredit(input: DebitCreditNormalizationInput): DebitCreditNormalizationResult {
+    return normalizeDebitCredit(input);
   }
 
   // =========================================================================
@@ -61,6 +98,22 @@ export class OfflineDataImportEngine {
 
   public deleteDataset(id: string): boolean {
     return this.storage.deleteDataset(id);
+  }
+
+  public async streamVouchers(datasetId: string, callback: (voucher: CanonicalVoucher) => void | Promise<void>): Promise<number> {
+    return this.storage.streamVouchers(datasetId, callback);
+  }
+
+  public async streamVoucherLines(datasetId: string, callback: (line: any) => void | Promise<void>): Promise<number> {
+    return this.storage.streamVoucherLines(datasetId, callback);
+  }
+
+  public async streamExceptions(datasetId: string, callback: (exc: CanonicalAuditException) => void | Promise<void>): Promise<number> {
+    return this.storage.streamExceptions(datasetId, callback);
+  }
+
+  public async getDatasetAggregates(datasetId: string) {
+    return this.storage.getDatasetAggregates(datasetId);
   }
 
   // =========================================================================
@@ -90,6 +143,69 @@ export class OfflineDataImportEngine {
     } else {
       throw new Error(`Unsupported file type: ${fileType}`);
     }
+  }
+
+  /**
+   * Parse a file asynchronously with streaming support for large files.
+   * For JSON files >= 10MB (or when sessionRecordsPath is provided for large files),
+   * uses StreamingJsonParser which streams voucher-by-voucher without holding the entire
+   * file or array in memory.
+   */
+  public async parseFileFromDiskAsync(
+    filePath: string,
+    fileType: ImportFileFormat,
+    originalFileName: string,
+    sessionRecordsPath?: string,
+    onProgress?: (p: any) => void
+  ): Promise<{
+    preview: RawParsedPreview;
+    rawRecords?: any;
+    recordsFilePath?: string;
+    isStreamed: boolean;
+    counts?: any;
+  }> {
+    if (!fs.existsSync(filePath)) {
+      throw new Error(`Uploaded file not found on disk at: ${filePath}`);
+    }
+
+    const stats = fs.statSync(filePath);
+    const fileName = originalFileName || path.basename(filePath);
+
+    if (fileType === 'JSON' && (stats.size >= LARGE_FILE_THRESHOLD_BYTES || !sessionRecordsPath) && sessionRecordsPath) {
+      // Memory-Safe Incremental Streaming Path:
+      const streamResult = await StreamingJsonParser.parseFile(
+        filePath,
+        sessionRecordsPath,
+        fileName,
+        onProgress
+      );
+
+      return {
+        preview: streamResult.preview,
+        recordsFilePath: sessionRecordsPath,
+        isStreamed: true,
+        counts: streamResult.preview.counts
+      };
+    }
+
+    // Standard path for smaller files (< 10MB) or XML/Excel
+    const syncResult = this.parseFileFromDisk(filePath, fileType, fileName);
+
+    if (sessionRecordsPath) {
+      fs.writeFileSync(sessionRecordsPath, JSON.stringify(syncResult.rawRecords), 'utf-8');
+      return {
+        preview: syncResult.preview,
+        recordsFilePath: sessionRecordsPath,
+        rawRecords: syncResult.rawRecords,
+        isStreamed: false
+      };
+    }
+
+    return {
+      preview: syncResult.preview,
+      rawRecords: syncResult.rawRecords,
+      isStreamed: false
+    };
   }
 
   // =========================================================================
@@ -151,7 +267,13 @@ export class OfflineDataImportEngine {
     let detectedFyFrom: string | null = null;
     let detectedFyTo: string | null = null;
     let isFyDetected = false;
-    let fyDetectionSource = 'Not Detected';
+    let fyDetectionSource = 'Not Detected in Source Data';
+    let fySourceEvidence: {
+      sourceType: ImportFileFormat;
+      sourcePath: string;
+      sourceField: string;
+      sourceValue: string;
+    } | undefined = undefined;
 
     // 1. Detect Company Name from XML
     const companyMatch = xmlString.match(/<CURRENTCOMPANY>([^<]+)<\/CURRENTCOMPANY>/i) ||
@@ -176,6 +298,12 @@ export class OfflineDataImportEngine {
         detectedFyTo = toParsed;
         isFyDetected = true;
         fyDetectionSource = 'XML Company Master (<STARTINGFROM>/<ENDINGAT>)';
+        fySourceEvidence = {
+          sourceType: 'XML',
+          sourcePath: 'TALLYMESSAGE.COMPANY',
+          sourceField: '<STARTINGFROM> / <ENDINGAT>',
+          sourceValue: `${startingFromMatch[1]} to ${endingAtMatch[1]}`
+        };
       }
     } else if (fyMatch) {
       const parts = fyMatch[1].split(/[-–to]/i).map(s => s.trim());
@@ -187,6 +315,12 @@ export class OfflineDataImportEngine {
           detectedFyTo = p2;
           isFyDetected = true;
           fyDetectionSource = 'XML <FINANCIALYEAR> tag';
+          fySourceEvidence = {
+            sourceType: 'XML',
+            sourcePath: 'TALLYMESSAGE.FINANCIALYEAR',
+            sourceField: '<FINANCIALYEAR>',
+            sourceValue: fyMatch[1]
+          };
         }
       }
     }
@@ -292,40 +426,35 @@ export class OfflineDataImportEngine {
         const amtMatch = entryContent.match(/<AMOUNT>([^<]+)<\/AMOUNT>/i);
         const isDeemedPositiveMatch = entryContent.match(/<ISDEEMEDPOSITIVE>([^<]+)<\/ISDEEMEDPOSITIVE>/i);
 
-        let parsedAmt: number | null = null;
-        let rawAmt: number | null = null;
-        if (amtMatch) {
-          const rawNum = parseFloat(amtMatch[1]);
-          if (!isNaN(rawNum)) {
-            rawAmt = rawNum;
-            parsedAmt = Math.abs(rawNum);
-          }
+        const norm = normalizeDebitCredit({
+          ISDEEMEDPOSITIVE: isDeemedPositiveMatch ? isDeemedPositiveMatch[1].trim() : undefined,
+          rawAmount: amtMatch ? amtMatch[1].trim() : undefined,
+          fileFormatHint: 'XML'
+        });
+
+        if (norm.normalizedAmount !== null && norm.isDebit !== null) {
+          if (norm.isDebit) totalDebit += norm.normalizedAmount;
+          else totalCredit += norm.normalizedAmount;
         }
 
-        // Tally ISDEEMEDPOSITIVE: Yes = Debit, No = Credit. If not present, negative amount in Tally denotes Debit
-        let isDebit: boolean | null = null;
-        let isDeemedPositive: boolean | null = null;
-        if (isDeemedPositiveMatch) {
-          isDeemedPositive = isDeemedPositiveMatch[1].trim().toLowerCase() === 'yes';
-          isDebit = isDeemedPositive;
-        } else if (rawAmt !== null) {
-          isDebit = rawAmt < 0;
-        }
-
-        if (parsedAmt !== null && isDebit !== null) {
-          if (isDebit) totalDebit += parsedAmt;
-          else totalCredit += parsedAmt;
-        }
+        const lineReviewRequired = !lNameMatch || norm.normalizedAmount === null || norm.direction === 'UNKNOWN' || norm.reviewRequired;
+        const lineReviewReason = !lNameMatch 
+          ? 'Missing ledger name in entry' 
+          : (norm.normalizedAmount === null ? 'Invalid or missing line amount' : norm.reviewReason);
 
         entries.push({
           id: `line-${vCount}-${lineIdx}`,
           ledgerName: lNameMatch ? lNameMatch[1].trim() : null,
-          amount: parsedAmt,
-          isDebit,
-          isDeemedPositive,
-          rawAmount: rawAmt,
-          reviewRequired: !lNameMatch || parsedAmt === null,
-          reviewReason: !lNameMatch ? 'Missing ledger name in entry' : (parsedAmt === null ? 'Invalid or missing line amount' : undefined),
+          amount: norm.normalizedAmount,
+          isDebit: norm.isDebit,
+          isDeemedPositive: norm.isDeemedPositive,
+          rawAmount: norm.sourceAmount,
+          sourceAmount: norm.sourceAmount,
+          normalizedAmount: norm.normalizedAmount,
+          direction: norm.direction,
+          ruleApplied: norm.ruleApplied,
+          reviewRequired: lineReviewRequired,
+          reviewReason: lineReviewReason,
           traceability: {
             sourceFileType: 'XML' as ImportFileFormat,
             sourceFile: fileName,
@@ -400,7 +529,8 @@ export class OfflineDataImportEngine {
       });
     }
 
-    // 7. If Financial Year was not explicitly in header, infer from voucher dates
+    // 7. If Financial Year was not explicitly in header, build explicit derived suggestion if dates exist (never auto-infer as confirmed)
+    let inferredSuggestion: { from: string; to: string; label: string; minDate: string; maxDate: string } | undefined = undefined;
     if (!isFyDetected && extractedDates.length > 0) {
       extractedDates.sort();
       const minDate = extractedDates[0];
@@ -410,10 +540,14 @@ export class OfflineDataImportEngine {
 
       // Indian Financial Year boundary: Apr 1 - Mar 31
       let startYear = minMonth >= 4 ? minYear : minYear - 1;
-      detectedFyFrom = `${startYear}-04-01`;
-      detectedFyTo = `${startYear + 1}-03-31`;
-      isFyDetected = true;
-      fyDetectionSource = `Inferred from voucher date range (${minDate} → ${maxDate})`;
+      inferredSuggestion = {
+        from: `${startYear}-04-01`,
+        to: `${startYear + 1}-03-31`,
+        label: 'Derived / inferred — review required',
+        minDate,
+        maxDate
+      };
+      // Explicit policy: Do NOT fabricate detectedFyFrom / detectedFyTo. They remain null!
     }
 
     const preview: RawParsedPreview = {
@@ -425,7 +559,14 @@ export class OfflineDataImportEngine {
         from: detectedFyFrom,
         to: detectedFyTo,
         isDetected: isFyDetected,
-        detectionSource: fyDetectionSource
+        status: isFyDetected ? 'DETECTED' : 'REVIEW_REQUIRED',
+        explanation: isFyDetected ? undefined : 'Financial year was not detected in the source data.',
+        detectionSource: isFyDetected ? fyDetectionSource : 'Not Detected in Source Data',
+        sourceType: isFyDetected ? fySourceEvidence?.sourceType : undefined,
+        sourcePath: isFyDetected ? fySourceEvidence?.sourcePath : undefined,
+        sourceField: isFyDetected ? fySourceEvidence?.sourceField : undefined,
+        sourceValue: isFyDetected ? fySourceEvidence?.sourceValue : undefined,
+        inferredSuggestion
       },
       rawSampleData: {
         vouchers: vouchers.slice(0, 10),
@@ -476,7 +617,11 @@ export class OfflineDataImportEngine {
         fyFrom: detectedFyFrom,
         fyTo: detectedFyTo,
         isFyDetected,
-        fyDetectionSource
+        fyStatus: isFyDetected ? 'DETECTED' : 'REVIEW_REQUIRED',
+        fyExplanation: isFyDetected ? undefined : 'Financial year was not detected in the source data.',
+        fyDetectionSource: isFyDetected ? fyDetectionSource : 'Not Detected in Source Data',
+        fySourceEvidence,
+        inferredSuggestion
       }
     };
   }
@@ -514,89 +659,291 @@ export class OfflineDataImportEngine {
     let detectedFyFrom: string | null = null;
     let detectedFyTo: string | null = null;
     let isFyDetected = false;
-    let fyDetectionSource = 'Not Detected';
+    let fyDetectionSource = 'Not Detected in Source Data';
+    let fySourceEvidence: {
+      sourceType: ImportFileFormat;
+      sourcePath: string;
+      sourceField: string;
+      sourceValue: string;
+    } | undefined = undefined;
 
     const extractedDates: string[] = [];
+
+    // Helper to check if an object represents a ledger entry candidate
+    const isLedgerEntryObject = (o: any): boolean => {
+      if (!o || typeof o !== 'object' || Array.isArray(o)) return false;
+      const keys = Object.keys(o).map(k => k.toLowerCase().replace(/[^a-z0-9]/g, ''));
+      const hasLedgerName = keys.some(k => 
+        k === 'ledgername' || k === 'name' || k === 'account' || k === 'party' || 
+        k === 'partyledgername' || k === 'partyledger' || k === 'particulars' || k === 'ledger'
+      );
+      const hasAmount = keys.some(k => 
+        k === 'amount' || k === 'total' || k === 'amt' || k === 'rawamount' || k === 'netamount'
+      );
+      const hasDebitCredit = keys.some(k => 
+        k === 'isdeemedpositive' || k === 'isdebit' || k === 'iscredit' || k === 'type' || k === 'drcr'
+      );
+      return hasLedgerName || (hasAmount && hasDebitCredit);
+    };
+
+    // Recursive helper to locate raw ledger entries from direct arrays, object-wrapped arrays, or nested structures
+    const locateRawLedgerEntries = (obj: any, path: string, depth: number = 0): { items: { item: any; path: string }[]; path: string } | null => {
+      if (depth > 4 || !obj || typeof obj !== 'object') return null;
+
+      // Handle direct array if obj itself is an array
+      if (Array.isArray(obj)) {
+        if (obj.length === 0) return { items: [], path };
+        const unwrapped = obj.map((rawLine, lIdx) => {
+          let lineObj = rawLine;
+          let linePath = `${path}[${lIdx}]`;
+          if (lineObj && typeof lineObj === 'object' && !Array.isArray(lineObj)) {
+            for (const wrapKey of ['LEDGERENTRY', 'ledgerEntry', 'entry', 'ENTRY', 'line', 'LINE']) {
+              if (lineObj[wrapKey] && typeof lineObj[wrapKey] === 'object' && !Array.isArray(lineObj[wrapKey])) {
+                lineObj = lineObj[wrapKey];
+                linePath = `${linePath}.${wrapKey}`;
+                break;
+              }
+            }
+          }
+          return { item: lineObj, path: linePath };
+        });
+        return { items: unwrapped, path };
+      }
+
+      const CANDIDATE_KEYS = [
+        'ALLLEDGERENTRIES',
+        'allLedgerEntries',
+        'ALL_LEDGER_ENTRIES',
+        'all_ledger_entries',
+        'ALLLEDGERENTRIES.LIST',
+        'allledgerentries.list',
+        'LEDGERENTRIES',
+        'ledgerEntries',
+        'LedgerEntries',
+        'LEDGERENTRIES.LIST',
+        'ledgerentries.list',
+        'ledger_entries',
+        'entries',
+        'Entries',
+        'lines',
+        'Lines',
+        'ledgerLines',
+        'LedgerLines'
+      ];
+
+      const objKeys = Object.keys(obj);
+
+      // 1. Inspect known candidate keys on obj
+      for (const cand of CANDIDATE_KEYS) {
+        const cleanCand = cand.toLowerCase().replace(/[^a-z0-9]/g, '');
+        const actualKey = objKeys.find(k => k === cand || k.toLowerCase().replace(/[^a-z0-9]/g, '') === cleanCand);
+        if (actualKey && obj[actualKey] !== undefined) {
+          const val = obj[actualKey];
+          const formattedKey = /^[a-zA-Z_$][a-zA-Z0-9_$]*$/.test(actualKey)
+            ? `.${actualKey}`
+            : `['${actualKey}']`;
+          const candPath = `${path}${formattedKey}`;
+
+          if (Array.isArray(val)) {
+            if (val.length === 0) return { items: [], path: candPath };
+            const unwrapped = val.map((rawLine, lIdx) => {
+              let lineObj = rawLine;
+              let linePath = `${candPath}[${lIdx}]`;
+              if (lineObj && typeof lineObj === 'object' && !Array.isArray(lineObj)) {
+                for (const wrapKey of ['LEDGERENTRY', 'ledgerEntry', 'entry', 'ENTRY', 'line', 'LINE']) {
+                  if (lineObj[wrapKey] && typeof lineObj[wrapKey] === 'object' && !Array.isArray(lineObj[wrapKey])) {
+                    lineObj = lineObj[wrapKey];
+                    linePath = `${linePath}.${wrapKey}`;
+                    break;
+                  }
+                }
+              }
+              return { item: lineObj, path: linePath };
+            });
+            return { items: unwrapped, path: candPath };
+          }
+
+          if (typeof val === 'object' && val !== null) {
+            // Check if val contains nested ledger entry collections (e.g. ALLLEDGERENTRIES: { LEDGERENTRIES: [...] })
+            const nestedRes = locateRawLedgerEntries(val, candPath, depth + 1);
+            if (nestedRes && nestedRes.items.length > 0) {
+              return nestedRes;
+            }
+
+            // Check if val itself is a single ledger entry object
+            if (isLedgerEntryObject(val)) {
+              return { items: [{ item: val, path: candPath }], path: candPath };
+            }
+          }
+        }
+      }
+
+      // 2. If at voucher level (depth 0), check if wrapped inside an inner voucher object
+      if (depth === 0) {
+        for (const wrapKey of ['voucher', 'VOUCHER', 'Voucher', 'transaction', 'Transaction']) {
+          if (obj[wrapKey] && typeof obj[wrapKey] === 'object' && !Array.isArray(obj[wrapKey])) {
+            const res = locateRawLedgerEntries(obj[wrapKey], `${path}.${wrapKey}`, depth + 1);
+            if (res && res.items.length > 0) return res;
+          }
+        }
+      }
+
+      // 3. Check any array property whose elements look like ledger entries
+      for (const k of objKeys) {
+        if (Array.isArray(obj[k]) && obj[k].length > 0 && isLedgerEntryObject(obj[k][0])) {
+          return {
+            items: obj[k].map((rawLine: any, lIdx: number) => ({ item: rawLine, path: `${path}.${k}[${lIdx}]` })),
+            path: `${path}.${k}`
+          };
+        }
+      }
+
+      return null;
+    };
 
     // Helper to extract vouchers from array of raw objects
     const extractVouchersFromArray = (arr: any[], basePath: string) => {
       return arr.map((item, idx) => {
-        const rawDate = item.date || item.DATE || item.voucherDate || item.txDate || item.Date || item.VoucherDate || null;
+        let vch = item;
+        let vchPath = `${basePath}[${idx}]`;
+
+        // Unwrap voucher container if wrapped (e.g. { voucher: { ... } })
+        if (vch && typeof vch === 'object' && !Array.isArray(vch)) {
+          for (const w of ['voucher', 'VOUCHER', 'Voucher', 'transaction', 'Transaction']) {
+            if (vch[w] && typeof vch[w] === 'object' && !Array.isArray(vch[w])) {
+              vch = vch[w];
+              vchPath = `${vchPath}.${w}`;
+              break;
+            }
+          }
+        }
+
+        const vNumRaw = vch.voucherNumber || vch.VOUCHERNUMBER || vch.vchNo || vch.invoiceNo || vch.VchNo || vch.InvoiceNo || 
+                        item.voucherNumber || item.VOUCHERNUMBER || item.vchNo || item.invoiceNo || null;
+        const vNum = vNumRaw ? String(vNumRaw).trim() : null;
+
+        const vTypeRaw = vch.voucherType || vch.VOUCHERTYPENAME || vch.type || vch.vchType || vch.VchType || 
+                         item.voucherType || item.VOUCHERTYPENAME || null;
+        const vType = vTypeRaw ? String(vTypeRaw).trim() : null;
+
+        const rawDate = vch.date || vch.DATE || vch.voucherDate || vch.txDate || vch.Date || vch.VoucherDate || item.date || item.DATE || null;
         const parsedDate = this.parseTallyDate(rawDate);
         if (parsedDate) extractedDates.push(parsedDate);
 
-        const rawAmt = item.amount !== undefined ? item.amount : 
-                       (item.AMOUNT !== undefined ? item.AMOUNT : 
-                       (item.total !== undefined ? item.total : 
-                       (item.netAmount !== undefined ? item.netAmount : 
-                       (item.Total !== undefined ? item.Total : item.Amount))));
-        const numAmt = typeof rawAmt === 'number' ? Math.abs(rawAmt) : (rawAmt ? Math.abs(parseFloat(rawAmt)) : null);
-        const validAmt = isNaN(numAmt as number) ? null : numAmt;
+        // Header amount extraction
+        const rawHeaderAmt = vch.amount !== undefined ? vch.amount : 
+                             (vch.AMOUNT !== undefined ? vch.AMOUNT : 
+                             (vch.total !== undefined ? vch.total : 
+                             (vch.netAmount !== undefined ? vch.netAmount : 
+                             (vch.Total !== undefined ? vch.Total : 
+                             (vch.Amount !== undefined ? vch.Amount : 
+                             (item.amount !== undefined ? item.amount : (item.AMOUNT !== undefined ? item.AMOUNT : undefined)))))));
+        let headerAmt: number | null = null;
+        if (typeof rawHeaderAmt === 'number') {
+          headerAmt = Math.abs(rawHeaderAmt);
+        } else if (typeof rawHeaderAmt === 'string') {
+          const num = parseFloat(rawHeaderAmt.replace(/,/g, '').trim());
+          if (!isNaN(num)) headerAmt = Math.abs(num);
+        }
 
-        const rawEntries = item.entries || item.ALLLEDGERENTRIES || item.lines || item.ledgerEntries || item.LEDGERENTRIES || item.Entries || [];
+        // Locate genuine source ledger entries
+        const located = locateRawLedgerEntries(vch, vchPath);
         const entries: CanonicalVoucherLine[] = [];
         let totalDebit = 0;
         let totalCredit = 0;
 
-        if (Array.isArray(rawEntries) && rawEntries.length > 0) {
-          rawEntries.forEach((e: any, lIdx: number) => {
-            const lName = e.ledgerName || e.LEDGERNAME || e.name || e.account || e.LedgerName || e.Party || null;
-            const eAmtRaw = e.amount !== undefined ? e.amount : (e.AMOUNT !== undefined ? e.AMOUNT : e.Amount);
-            const eAmtNum = typeof eAmtRaw === 'number' ? Math.abs(eAmtRaw) : (eAmtRaw ? Math.abs(parseFloat(eAmtRaw)) : null);
-            const isDebit = e.isDebit !== undefined ? Boolean(e.isDebit) : 
-                           (e.type === 'Debit' || e.type === 'Dr' || e.type === 'DR' || (typeof eAmtRaw === 'number' && eAmtRaw < 0));
-            
-            if (eAmtNum !== null) {
-              if (isDebit) totalDebit += eAmtNum;
-              else totalCredit += eAmtNum;
+        if (located && located.items.length > 0) {
+          located.items.forEach(({ item: e, path: linePath }, lIdx) => {
+            if (!e || typeof e !== 'object') return;
+
+            const lNameRaw = e.ledgerName || e.LEDGERNAME || e.name || e.account || e.LedgerName || 
+                             e.Party || e.PARTYLEDGERNAME || e.partyLedger || e.party || 
+                             e.Particulars || e.particulars || null;
+            const lName = lNameRaw ? String(lNameRaw).trim() : null;
+
+            const eAmtRaw = e.amount !== undefined ? e.amount : 
+                            (e.AMOUNT !== undefined ? e.AMOUNT : 
+                            (e.Amount !== undefined ? e.Amount : 
+                            (e.total !== undefined ? e.total : 
+                            (e.netAmount !== undefined ? e.netAmount : e.rawAmount))));
+
+            // Centralized Debit/Credit Normalization with zero JavaScript truthiness hazards
+            const norm = normalizeDebitCredit({
+              isDebit: e.isDebit,
+              isCredit: e.isCredit,
+              isDeemedPositive: e.isDeemedPositive !== undefined ? e.isDeemedPositive : e.ISDEEMEDPOSITIVE,
+              type: e.type !== undefined ? e.type : (e.TYPE !== undefined ? e.TYPE : (e.drCr || e.DR_CR || e.dr_cr)),
+              debitAmount: e.debit !== undefined ? e.debit : (e.DEBIT !== undefined ? e.DEBIT : (e.debitAmount !== undefined ? e.debitAmount : e.Debit)),
+              creditAmount: e.credit !== undefined ? e.credit : (e.CREDIT !== undefined ? e.CREDIT : (e.creditAmount !== undefined ? e.creditAmount : e.Credit)),
+              rawAmount: eAmtRaw,
+              fileFormatHint: 'JSON'
+            });
+
+            if (norm.normalizedAmount !== null && norm.isDebit !== null) {
+              if (norm.isDebit) totalDebit += norm.normalizedAmount;
+              else totalCredit += norm.normalizedAmount;
             }
+
+            const lineReviewRequired = !lName || norm.normalizedAmount === null || norm.direction === 'UNKNOWN' || norm.reviewRequired;
+            const lineReviewReason = !lName 
+              ? 'Missing ledger name in source entry' 
+              : (norm.normalizedAmount === null ? 'Invalid or missing line amount in source entry' : norm.reviewReason);
 
             entries.push({
               id: `line-json-${idx + 1}-${lIdx + 1}`,
               ledgerName: lName,
-              amount: eAmtNum,
-              isDebit,
-              rawAmount: eAmtRaw,
-              reviewRequired: !lName || eAmtNum === null,
+              amount: norm.normalizedAmount,
+              isDebit: norm.isDebit,
+              isDeemedPositive: norm.isDeemedPositive,
+              rawAmount: norm.sourceAmount,
+              sourceAmount: norm.sourceAmount,
+              normalizedAmount: norm.normalizedAmount,
+              direction: norm.direction,
+              ruleApplied: norm.ruleApplied,
+              reviewRequired: lineReviewRequired,
+              reviewReason: lineReviewReason,
               traceability: {
                 sourceFileType: 'JSON' as ImportFileFormat,
                 sourceFile: fileName,
-                jsonPath: `${basePath}[${idx}].entries[${lIdx}]`,
-                sourceField: lName || `line[${lIdx}]`
+                jsonPath: linePath,
+                sourceField: lName || `line[${lIdx + 1}]`
               }
             });
           });
-        } else if (validAmt !== null) {
-          // Single entry from flat row (preserve faithfully without creating fake counter entries)
-          const singleParty = item.partyLedger || item.PARTYLEDGERNAME || item.party || item.customerName || item.Particulars || item.particulars || null;
-          entries.push({
-            id: `line-json-${idx + 1}-1`,
-            ledgerName: singleParty,
-            amount: validAmt,
-            isDebit: true,
-            reviewRequired: !singleParty,
-            traceability: {
-              sourceFileType: 'JSON' as ImportFileFormat,
-              sourceFile: fileName,
-              jsonPath: `${basePath}[${idx}]`,
-              sourceField: singleParty || 'amount'
-            }
-          });
-          totalDebit = validAmt;
+        }
+
+        // Voucher Amount: header amount if provided, or total of ledger entries (never synthesize balancing entries)
+        let finalVchAmount: number | null = null;
+        if (headerAmt !== null) {
+          finalVchAmount = headerAmt;
+        } else if (totalDebit > 0) {
+          finalVchAmount = totalDebit;
+        } else if (totalCredit > 0) {
+          finalVchAmount = totalCredit;
         }
 
         const diff = Math.abs(totalDebit - totalCredit);
         const isBalanced = entries.length >= 2 && diff <= 0.05 && totalDebit > 0;
 
-        const vNum = item.voucherNumber || item.VOUCHERNUMBER || item.invoiceNo || item.VoucherNumber || item.VchNo || item.billNo || null;
-        const vType = item.voucherType || item.VOUCHERTYPENAME || item.type || item.VoucherType || item.VchType || null;
-        const partyLedger = item.partyLedger || item.PARTYLEDGERNAME || item.party || item.customerName || item.Particulars || (entries[0]?.ledgerName || null);
+        const partyLedger = vch.partyLedger || vch.PARTYLEDGERNAME || vch.party || vch.customerName || vch.Particulars || vch.particulars || 
+                            item.partyLedger || item.PARTYLEDGERNAME || item.party || 
+                            (entries.length > 0 ? entries[0].ledgerName : null);
+
+        const narration = vch.narration || vch.NARRATION || vch.remarks || vch.description || item.narration || item.NARRATION || null;
 
         const reviewReasons: string[] = [];
         if (!parsedDate) reviewReasons.push('Missing or unparseable voucher date');
         if (!vNum) reviewReasons.push('Missing voucher reference number');
-        if (validAmt === null) reviewReasons.push('Missing or non-numeric amount in source record');
-        if (!isBalanced && entries.length > 0) reviewReasons.push(`Debit/Credit imbalance: difference of ₹${diff.toFixed(2)}`);
+        if (!vType) reviewReasons.push('Missing voucher type in source');
+        if (finalVchAmount === null) reviewReasons.push('Missing or non-numeric amount in source record');
+
+        if (entries.length === 0) {
+          reviewReasons.push('No source ledger entries detected (missing ALLLEDGERENTRIES / LEDGERENTRIES / entries structure)');
+        } else if (entries.length === 1) {
+          reviewReasons.push('Voucher has only 1 ledger entry (unbalanced transaction)');
+        } else if (!isBalanced) {
+          reviewReasons.push(`Debit/Credit imbalance: difference of ₹${diff.toFixed(2)}`);
+        }
 
         return {
           id: item.id || item.guid || `JSON-V-${idx + 1}`,
@@ -604,21 +951,22 @@ export class OfflineDataImportEngine {
           voucherType: vType,
           date: parsedDate,
           partyLedger,
-          amount: validAmt,
+          amount: finalVchAmount,
           totalDebit,
           totalCredit,
           difference: diff,
           isBalanced,
-          narration: item.narration || item.NARRATION || item.remarks || item.Narration || null,
+          narration,
           entries,
-          reviewRequired: reviewReasons.length > 0,
+          reviewRequired: reviewReasons.length > 0 || entries.length === 0,
           reviewReasons,
           sourceFile: fileName,
+          datasetId: '',
           traceability: {
             sourceFileType: 'JSON' as ImportFileFormat,
             sourceFile: fileName,
-            jsonPath: `${basePath}[${idx}]`,
-            sourceField: String(vNum || `voucher[${idx}]`)
+            jsonPath: vchPath,
+            sourceField: String(vNum || `voucher[${idx + 1}]`)
           }
         };
       });
@@ -665,53 +1013,206 @@ export class OfflineDataImportEngine {
       }
 
       if (parsed.financialYear && typeof parsed.financialYear === 'object') {
-        const from = this.parseTallyDate(parsed.financialYear.from || parsed.financialYear.startDate || parsed.financialYear.From);
-        const to = this.parseTallyDate(parsed.financialYear.to || parsed.financialYear.endDate || parsed.financialYear.To);
+        const from = this.parseTallyDate(parsed.financialYear.from || parsed.financialYear.startDate || parsed.financialYear.From || parsed.financialYear.startingFrom);
+        const to = this.parseTallyDate(parsed.financialYear.to || parsed.financialYear.endDate || parsed.financialYear.To || parsed.financialYear.endingAt);
         if (from && to) {
           detectedFyFrom = from;
           detectedFyTo = to;
           isFyDetected = true;
-          fyDetectionSource = 'JSON Schema Object (financialYear)';
+          fyDetectionSource = 'JSON Schema Object ($.financialYear)';
+          fySourceEvidence = {
+            sourceType: 'JSON',
+            sourcePath: '$.financialYear',
+            sourceField: 'financialYear.from / to',
+            sourceValue: `${parsed.financialYear.from || parsed.financialYear.startDate || parsed.financialYear.From || parsed.financialYear.startingFrom} - ${parsed.financialYear.to || parsed.financialYear.endDate || parsed.financialYear.To || parsed.financialYear.endingAt}`
+          };
+        }
+      } else if (typeof parsed.financialYear === 'string') {
+        const parts = parsed.financialYear.split(/[-–to]/i).map((s: string) => s.trim());
+        if (parts.length === 2) {
+          let y1 = parseInt(parts[0]);
+          let y2 = parseInt(parts[1]);
+          if (!isNaN(y1) && !isNaN(y2)) {
+            if (y1 < 100) y1 += 2000;
+            if (y2 < 100) y2 += 2000;
+            detectedFyFrom = `${y1}-04-01`;
+            detectedFyTo = `${y2 === y1 + 1 || y2 === y1 ? y1 + 1 : y2}-03-31`;
+            isFyDetected = true;
+            fyDetectionSource = 'JSON Schema String ($.financialYear)';
+            fySourceEvidence = {
+              sourceType: 'JSON',
+              sourcePath: '$.financialYear',
+              sourceField: 'financialYear',
+              sourceValue: parsed.financialYear
+            };
+          } else {
+            const p1 = this.parseTallyDate(parts[0]);
+            const p2 = this.parseTallyDate(parts[1]);
+            if (p1 && p2) {
+              detectedFyFrom = p1;
+              detectedFyTo = p2;
+              isFyDetected = true;
+              fyDetectionSource = 'JSON Schema String ($.financialYear date range)';
+              fySourceEvidence = {
+                sourceType: 'JSON',
+                sourcePath: '$.financialYear',
+                sourceField: 'financialYear',
+                sourceValue: parsed.financialYear
+              };
+            }
+          }
+        }
+      } else if (parsed.financialYearFrom && parsed.financialYearTo) {
+        const from = this.parseTallyDate(parsed.financialYearFrom);
+        const to = this.parseTallyDate(parsed.financialYearTo);
+        if (from && to) {
+          detectedFyFrom = from;
+          detectedFyTo = to;
+          isFyDetected = true;
+          fyDetectionSource = 'JSON Schema Fields (financialYearFrom / financialYearTo)';
+          fySourceEvidence = {
+            sourceType: 'JSON',
+            sourcePath: '$.financialYearFrom',
+            sourceField: 'financialYearFrom / financialYearTo',
+            sourceValue: `${parsed.financialYearFrom} - ${parsed.financialYearTo}`
+          };
         }
       }
 
-      // Check for DayBook / daybook array or object
+      // Check for DayBook / daybook array or nested object structure
       const rawDaybook = parsed.DayBook || parsed.daybook || parsed.DAYBOOK || parsed.Daybook;
       if (Array.isArray(rawDaybook)) {
         vouchers = extractVouchersFromArray(rawDaybook, '$.DayBook');
+      } else if (rawDaybook && typeof rawDaybook === 'object') {
+        for (const vKey of ['VOUCHER', 'vouchers', 'Vouchers', 'voucher', 'Voucher', 'transactions', 'Transactions', 'data']) {
+          if (Array.isArray(rawDaybook[vKey])) {
+            vouchers = extractVouchersFromArray(rawDaybook[vKey], `$.DayBook.${vKey}`);
+            break;
+          } else if (rawDaybook[vKey] && typeof rawDaybook[vKey] === 'object') {
+            vouchers = extractVouchersFromArray([rawDaybook[vKey]], `$.DayBook.${vKey}`);
+            break;
+          }
+        }
+        if (vouchers.length === 0) {
+          const values = Object.values(rawDaybook);
+          if (values.length > 0 && typeof values[0] === 'object') {
+            vouchers = extractVouchersFromArray(values, '$.DayBook');
+          }
+        }
       }
 
-      // Check for vouchers array
+      // Check for vouchers array or object
       const rawVouchers = parsed.vouchers || parsed.Vouchers || parsed.VOUCHERS || parsed.transactions || parsed.Transactions || parsed.data;
-      if (vouchers.length === 0 && Array.isArray(rawVouchers)) {
-        vouchers = extractVouchersFromArray(rawVouchers, '$.vouchers');
+      if (vouchers.length === 0) {
+        if (Array.isArray(rawVouchers)) {
+          vouchers = extractVouchersFromArray(rawVouchers, '$.vouchers');
+        } else if (rawVouchers && typeof rawVouchers === 'object') {
+          for (const vKey of ['VOUCHER', 'vouchers', 'voucher', 'Voucher', 'transactions']) {
+            if (Array.isArray(rawVouchers[vKey])) {
+              vouchers = extractVouchersFromArray(rawVouchers[vKey], `$.vouchers.${vKey}`);
+              break;
+            } else if (rawVouchers[vKey] && typeof rawVouchers[vKey] === 'object') {
+              vouchers = extractVouchersFromArray([rawVouchers[vKey]], `$.vouchers.${vKey}`);
+              break;
+            }
+          }
+        }
+      }
+
+      // Check for single voucher wrapper: parsed.voucher or parsed.VOUCHER
+      if (vouchers.length === 0 && (parsed.voucher || parsed.VOUCHER || parsed.Voucher)) {
+        const v = parsed.voucher || parsed.VOUCHER || parsed.Voucher;
+        const vKey = parsed.voucher ? 'voucher' : (parsed.VOUCHER ? 'VOUCHER' : 'Voucher');
+        if (Array.isArray(v)) {
+          vouchers = extractVouchersFromArray(v, `$.${vKey}`);
+        } else if (typeof v === 'object' && v !== null) {
+          vouchers = extractVouchersFromArray([v], `$.${vKey}`);
+        }
       }
 
       // Check for Tally envelope structure: ENVELOPE.BODY.DATA.TALLYMESSAGE
       const tallyMsg = parsed.ENVELOPE?.BODY?.DATA?.TALLYMESSAGE || parsed.ENVELOPE?.BODY?.TALLYMESSAGE || parsed.TALLYMESSAGE;
-      if (tallyMsg && typeof tallyMsg === 'object') {
-        if (Array.isArray(tallyMsg.VOUCHER)) {
-          vouchers = extractVouchersFromArray(tallyMsg.VOUCHER, '$.ENVELOPE.BODY.TALLYMESSAGE.VOUCHER');
-        } else if (tallyMsg.VOUCHER && typeof tallyMsg.VOUCHER === 'object') {
-          vouchers = extractVouchersFromArray([tallyMsg.VOUCHER], '$.ENVELOPE.BODY.TALLYMESSAGE.VOUCHER');
-        }
-
-        if (Array.isArray(tallyMsg.LEDGER)) {
-          ledgers = tallyMsg.LEDGER.map((l: any, idx: number) => ({
-            name: l.NAME || l.name || null,
-            parent: l.PARENT || l.parent || null,
-            openingBalance: l.OPENINGBALANCE !== undefined ? parseFloat(l.OPENINGBALANCE) : null,
-            closingBalance: l.CLOSINGBALANCE !== undefined ? parseFloat(l.CLOSINGBALANCE) : null,
-            gstin: l.PARTYGSTIN || l.GSTIN || null,
-            state: l.LEDSTATENAME || null,
-            reviewRequired: !l.NAME,
-            traceability: {
-              sourceFileType: 'JSON' as ImportFileFormat,
-              sourceFile: fileName,
-              jsonPath: `$.ENVELOPE.BODY.TALLYMESSAGE.LEDGER[${idx}]`,
-              sourceField: l.NAME || `ledger[${idx}]`
+      if (tallyMsg) {
+        if (Array.isArray(tallyMsg)) {
+          const vList: any[] = [];
+          const lList: any[] = [];
+          tallyMsg.forEach((msg: any) => {
+            if (msg && typeof msg === 'object') {
+              if (msg.VOUCHER) {
+                if (Array.isArray(msg.VOUCHER)) vList.push(...msg.VOUCHER);
+                else vList.push(msg.VOUCHER);
+              }
+              if (msg.voucher) {
+                if (Array.isArray(msg.voucher)) vList.push(...msg.voucher);
+                else vList.push(msg.voucher);
+              }
+              if (msg.LEDGER) {
+                if (Array.isArray(msg.LEDGER)) lList.push(...msg.LEDGER);
+                else lList.push(msg.LEDGER);
+              }
+              if (msg.ledger) {
+                if (Array.isArray(msg.ledger)) lList.push(...msg.ledger);
+                else lList.push(msg.ledger);
+              }
             }
-          }));
+          });
+          if (vList.length > 0) {
+            vouchers = extractVouchersFromArray(vList, '$.TALLYMESSAGE.VOUCHER');
+          }
+          if (lList.length > 0 && ledgers.length === 0) {
+            ledgers = lList.map((l: any, idx: number) => ({
+              name: l.NAME || l.name || null,
+              parent: l.PARENT || l.parent || null,
+              openingBalance: l.OPENINGBALANCE !== undefined ? parseFloat(l.OPENINGBALANCE) : null,
+              closingBalance: l.CLOSINGBALANCE !== undefined ? parseFloat(l.CLOSINGBALANCE) : null,
+              gstin: l.PARTYGSTIN || l.GSTIN || null,
+              state: l.LEDSTATENAME || null,
+              reviewRequired: !l.NAME && !l.name,
+              traceability: {
+                sourceFileType: 'JSON' as ImportFileFormat,
+                sourceFile: fileName,
+                jsonPath: `$.TALLYMESSAGE[${idx}].LEDGER`,
+                sourceField: l.NAME || l.name || `ledger[${idx}]`
+              }
+            }));
+          }
+        } else if (typeof tallyMsg === 'object') {
+          if (Array.isArray(tallyMsg.VOUCHER)) {
+            vouchers = extractVouchersFromArray(tallyMsg.VOUCHER, '$.ENVELOPE.BODY.TALLYMESSAGE.VOUCHER');
+          } else if (tallyMsg.VOUCHER && typeof tallyMsg.VOUCHER === 'object') {
+            vouchers = extractVouchersFromArray([tallyMsg.VOUCHER], '$.ENVELOPE.BODY.TALLYMESSAGE.VOUCHER');
+          } else if (Array.isArray(tallyMsg.voucher)) {
+            vouchers = extractVouchersFromArray(tallyMsg.voucher, '$.ENVELOPE.BODY.TALLYMESSAGE.voucher');
+          }
+
+          if (Array.isArray(tallyMsg.LEDGER)) {
+            ledgers = tallyMsg.LEDGER.map((l: any, idx: number) => ({
+              name: l.NAME || l.name || null,
+              parent: l.PARENT || l.parent || null,
+              openingBalance: l.OPENINGBALANCE !== undefined ? parseFloat(l.OPENINGBALANCE) : null,
+              closingBalance: l.CLOSINGBALANCE !== undefined ? parseFloat(l.CLOSINGBALANCE) : null,
+              gstin: l.PARTYGSTIN || l.GSTIN || null,
+              state: l.LEDSTATENAME || null,
+              reviewRequired: !l.NAME && !l.name,
+              traceability: {
+                sourceFileType: 'JSON' as ImportFileFormat,
+                sourceFile: fileName,
+                jsonPath: `$.ENVELOPE.BODY.TALLYMESSAGE.LEDGER[${idx}]`,
+                sourceField: l.NAME || l.name || `ledger[${idx}]`
+              }
+            }));
+          }
+        }
+      }
+
+      // Check if root object itself is a single voucher (when not already extracted)
+      if (vouchers.length === 0 && ledgers.length === 0) {
+        const isSingleVch = parsed.voucherNumber !== undefined || parsed.VOUCHERNUMBER !== undefined || 
+                            parsed.voucherType !== undefined || parsed.VOUCHERTYPENAME !== undefined ||
+                            parsed.ALLLEDGERENTRIES !== undefined || parsed.LEDGERENTRIES !== undefined ||
+                            parsed.entries !== undefined || parsed.ledgerEntries !== undefined;
+        if (isSingleVch) {
+          vouchers = extractVouchersFromArray([parsed], '$');
         }
       }
 
@@ -773,7 +1274,8 @@ export class OfflineDataImportEngine {
       }
     }
 
-    // Infer financial year from extracted dates if not provided
+    // Build derived suggestion if transaction dates exist, but NEVER fabricate detectedFyFrom / detectedFyTo
+    let inferredSuggestion: { from: string; to: string; label: string; minDate: string; maxDate: string } | undefined = undefined;
     if (!isFyDetected && extractedDates.length > 0) {
       extractedDates.sort();
       const minDate = extractedDates[0];
@@ -782,10 +1284,14 @@ export class OfflineDataImportEngine {
       const minMonth = parseInt(minDate.substring(5, 7));
 
       let startYear = minMonth >= 4 ? minYear : minYear - 1;
-      detectedFyFrom = `${startYear}-04-01`;
-      detectedFyTo = `${startYear + 1}-03-31`;
-      isFyDetected = true;
-      fyDetectionSource = `Inferred from voucher date range (${minDate} → ${maxDate})`;
+      inferredSuggestion = {
+        from: `${startYear}-04-01`,
+        to: `${startYear + 1}-03-31`,
+        label: 'Derived / inferred — review required',
+        minDate,
+        maxDate
+      };
+      // Explicit policy: detectedFyFrom / detectedFyTo remain null! isFyDetected remains false!
     }
 
     const detectedEntities: any[] = [];
@@ -835,7 +1341,14 @@ export class OfflineDataImportEngine {
         from: detectedFyFrom,
         to: detectedFyTo,
         isDetected: isFyDetected,
-        detectionSource: fyDetectionSource
+        status: isFyDetected ? 'DETECTED' : 'REVIEW_REQUIRED',
+        explanation: isFyDetected ? undefined : 'Financial year was not detected in the source data.',
+        detectionSource: isFyDetected ? fyDetectionSource : 'Not Detected in Source Data',
+        sourceType: isFyDetected ? fySourceEvidence?.sourceType : undefined,
+        sourcePath: isFyDetected ? fySourceEvidence?.sourcePath : undefined,
+        sourceField: isFyDetected ? fySourceEvidence?.sourceField : undefined,
+        sourceValue: isFyDetected ? fySourceEvidence?.sourceValue : undefined,
+        inferredSuggestion
       },
       rawSampleData: {
         vouchers: vouchers.slice(0, 10),
@@ -857,7 +1370,11 @@ export class OfflineDataImportEngine {
         fyFrom: detectedFyFrom,
         fyTo: detectedFyTo,
         isFyDetected,
-        fyDetectionSource
+        fyStatus: isFyDetected ? 'DETECTED' : 'REVIEW_REQUIRED',
+        fyExplanation: isFyDetected ? undefined : 'Financial year was not detected in the source data.',
+        fyDetectionSource: isFyDetected ? fyDetectionSource : 'Not Detected in Source Data',
+        fySourceEvidence,
+        inferredSuggestion
       }
     };
   }
@@ -886,11 +1403,17 @@ export class OfflineDataImportEngine {
     let detectedFyFrom: string | null = null;
     let detectedFyTo: string | null = null;
     let isFyDetected = false;
-    let fyDetectionSource = 'Not Detected';
+    let fyDetectionSource = 'Not Detected in Source Data';
+    let fySourceEvidence: {
+      sourceType: ImportFileFormat;
+      sourcePath: string;
+      sourceField: string;
+      sourceValue: string;
+    } | undefined = undefined;
 
     // 1. Try to detect Financial Year from workbook properties or sheet names
     for (const sName of sheetNames) {
-      const fyMatch = sName.match(/FY\s*(\d{2,4})[-_](\d{2,4})/i) || sName.match(/(\d{4})[-_](\d{2,4})/);
+      const fyMatch = sName.match(/FY\s*(\d{2,4})[-_](\d{2,4})/i) || sName.match(/^(\d{4})[-_](\d{2,4})$/);
       if (fyMatch) {
         let y1 = parseInt(fyMatch[1]);
         let y2 = parseInt(fyMatch[2]);
@@ -901,6 +1424,12 @@ export class OfflineDataImportEngine {
           detectedFyTo = `${y1 + 1}-03-31`;
           isFyDetected = true;
           fyDetectionSource = `Worksheet Name pattern (${sName})`;
+          fySourceEvidence = {
+            sourceType: 'EXCEL',
+            sourcePath: `Worksheet: ${sName}`,
+            sourceField: 'Worksheet Name',
+            sourceValue: sName
+          };
           break;
         }
       }
@@ -994,64 +1523,93 @@ export class OfflineDataImportEngine {
           const narration = narrKey && r[narrKey] ? String(r[narrKey]).trim() : null;
 
           // Amount detection: check explicit debit/credit columns first, then amount column
-          const rawDr = debitKey && r[debitKey] !== '' ? parseFloat(r[debitKey]) : null;
-          const rawCr = creditKey && r[creditKey] !== '' ? parseFloat(r[creditKey]) : null;
-          const rawAmt = amtKey && r[amtKey] !== '' ? parseFloat(r[amtKey]) : null;
+          const rawDr = debitKey && r[debitKey] !== '' ? r[debitKey] : null;
+          const rawCr = creditKey && r[creditKey] !== '' ? r[creditKey] : null;
+          const rawAmt = amtKey && r[amtKey] !== '' ? r[amtKey] : null;
 
           const entries: CanonicalVoucherLine[] = [];
           let totalDebit = 0;
           let totalCredit = 0;
 
-          if (rawDr !== null && !isNaN(rawDr) && rawDr > 0) {
-            entries.push({
-              id: `line-ex-${sheetName}-${rowNum}-dr`,
-              ledgerName: party,
-              amount: Math.abs(rawDr),
-              isDebit: true,
-              rawAmount: rawDr,
-              reviewRequired: !party,
-              traceability: {
-                sourceFileType: 'EXCEL',
-                sourceFile: fileName,
-                worksheet: sheetName,
-                rowNumber: rowNum,
-                columnName: debitKey
-              }
+          if (rawDr !== null || rawCr !== null) {
+            const norm = normalizeDebitCredit({
+              debitAmount: rawDr,
+              creditAmount: rawCr,
+              fileFormatHint: 'EXCEL'
             });
-            totalDebit += Math.abs(rawDr);
-          }
 
-          if (rawCr !== null && !isNaN(rawCr) && rawCr > 0) {
-            entries.push({
-              id: `line-ex-${sheetName}-${rowNum}-cr`,
-              ledgerName: party,
-              amount: Math.abs(rawCr),
-              isDebit: false,
-              rawAmount: rawCr,
-              reviewRequired: !party,
-              traceability: {
-                sourceFileType: 'EXCEL',
-                sourceFile: fileName,
-                worksheet: sheetName,
-                rowNumber: rowNum,
-                columnName: creditKey
-              }
-            });
-            totalCredit += Math.abs(rawCr);
+            if (norm.normalizedAmount !== null && norm.direction !== 'UNKNOWN') {
+              entries.push({
+                id: `line-ex-${sheetName}-${rowNum}`,
+                ledgerName: party,
+                amount: norm.normalizedAmount,
+                isDebit: norm.isDebit,
+                isDeemedPositive: norm.isDeemedPositive,
+                rawAmount: norm.sourceAmount,
+                sourceAmount: norm.sourceAmount,
+                normalizedAmount: norm.normalizedAmount,
+                direction: norm.direction,
+                ruleApplied: norm.ruleApplied,
+                reviewRequired: !party || norm.reviewRequired,
+                reviewReason: !party ? 'Missing party/ledger name' : norm.reviewReason,
+                traceability: {
+                  sourceFileType: 'EXCEL',
+                  sourceFile: fileName,
+                  worksheet: sheetName,
+                  rowNumber: rowNum,
+                  columnName: norm.direction === 'Debit' ? (debitKey || 'Debit') : (creditKey || 'Credit')
+                }
+              });
+              if (norm.isDebit === true) totalDebit += norm.normalizedAmount;
+              else if (norm.isDebit === false) totalCredit += norm.normalizedAmount;
+            } else if (norm.normalizedAmount !== null && norm.direction === 'UNKNOWN') {
+              entries.push({
+                id: `line-ex-${sheetName}-${rowNum}`,
+                ledgerName: party,
+                amount: norm.normalizedAmount,
+                isDebit: null,
+                isDeemedPositive: null,
+                rawAmount: norm.sourceAmount,
+                sourceAmount: norm.sourceAmount,
+                normalizedAmount: norm.normalizedAmount,
+                direction: 'UNKNOWN',
+                ruleApplied: norm.ruleApplied,
+                reviewRequired: true,
+                reviewReason: norm.reviewReason || 'Undetermined debit/credit direction in source entry',
+                traceability: {
+                  sourceFileType: 'EXCEL',
+                  sourceFile: fileName,
+                  worksheet: sheetName,
+                  rowNumber: rowNum,
+                  columnName: debitKey || creditKey
+                }
+              });
+            }
           }
 
           // If no separate debit/credit column, check general amount column
           let vchAmount: number | null = null;
           if (entries.length === 0) {
-            if (rawAmt !== null && !isNaN(rawAmt)) {
-              vchAmount = Math.abs(rawAmt);
+            if (rawAmt !== null && rawAmt !== undefined && rawAmt !== '') {
+              const norm = normalizeDebitCredit({
+                rawAmount: rawAmt,
+                drCr: vTypeKey ? r[vTypeKey] : undefined,
+                fileFormatHint: 'EXCEL'
+              });
+              vchAmount = norm.normalizedAmount;
               entries.push({
                 id: `line-ex-${sheetName}-${rowNum}-amt`,
                 ledgerName: party,
-                amount: vchAmount,
-                isDebit: rawAmt < 0 ? true : null,
-                rawAmount: rawAmt,
-                reviewRequired: !party,
+                amount: norm.normalizedAmount,
+                isDebit: norm.isDebit,
+                isDeemedPositive: norm.isDeemedPositive,
+                rawAmount: norm.sourceAmount,
+                sourceAmount: norm.sourceAmount,
+                normalizedAmount: norm.normalizedAmount,
+                direction: norm.direction,
+                ruleApplied: norm.ruleApplied,
+                reviewRequired: !party || norm.reviewRequired,
+                reviewReason: !party ? 'Missing party/ledger name' : norm.reviewReason,
                 traceability: {
                   sourceFileType: 'EXCEL',
                   sourceFile: fileName,
@@ -1060,8 +1618,8 @@ export class OfflineDataImportEngine {
                   columnName: amtKey
                 }
               });
-              if (rawAmt < 0) totalDebit += vchAmount;
-              else totalCredit += vchAmount;
+              if (norm.isDebit === true && norm.normalizedAmount !== null) totalDebit += norm.normalizedAmount;
+              else if (norm.isDebit === false && norm.normalizedAmount !== null) totalCredit += norm.normalizedAmount;
             }
           } else {
             vchAmount = totalDebit > 0 ? totalDebit : totalCredit;
@@ -1163,7 +1721,8 @@ export class OfflineDataImportEngine {
       }
     }
 
-    // Infer financial year from extracted dates if not detected from sheet name
+    // Build derived suggestion if transaction dates exist, but NEVER fabricate detectedFyFrom / detectedFyTo
+    let inferredSuggestion: { from: string; to: string; label: string; minDate: string; maxDate: string } | undefined = undefined;
     if (!isFyDetected && extractedDates.length > 0) {
       extractedDates.sort();
       const minDate = extractedDates[0];
@@ -1172,10 +1731,14 @@ export class OfflineDataImportEngine {
       const minMonth = parseInt(minDate.substring(5, 7));
 
       let startYear = minMonth >= 4 ? minYear : minYear - 1;
-      detectedFyFrom = `${startYear}-04-01`;
-      detectedFyTo = `${startYear + 1}-03-31`;
-      isFyDetected = true;
-      fyDetectionSource = `Inferred from Excel date column range (${minDate} → ${maxDate})`;
+      inferredSuggestion = {
+        from: `${startYear}-04-01`,
+        to: `${startYear + 1}-03-31`,
+        label: 'Derived / inferred — review required',
+        minDate,
+        maxDate
+      };
+      // Explicit policy: detectedFyFrom / detectedFyTo remain null! isFyDetected remains false!
     }
 
     const preview: RawParsedPreview = {
@@ -1187,7 +1750,14 @@ export class OfflineDataImportEngine {
         from: detectedFyFrom,
         to: detectedFyTo,
         isDetected: isFyDetected,
-        detectionSource: fyDetectionSource
+        status: isFyDetected ? 'DETECTED' : 'REVIEW_REQUIRED',
+        explanation: isFyDetected ? undefined : 'Financial year was not detected in the source data.',
+        detectionSource: isFyDetected ? fyDetectionSource : 'Not Detected in Source Data',
+        sourceType: isFyDetected ? fySourceEvidence?.sourceType : undefined,
+        sourcePath: isFyDetected ? fySourceEvidence?.sourcePath : undefined,
+        sourceField: isFyDetected ? fySourceEvidence?.sourceField : undefined,
+        sourceValue: isFyDetected ? fySourceEvidence?.sourceValue : undefined,
+        inferredSuggestion
       },
       sheets: sheetNames,
       selectedSheet: sheetNames[0],
@@ -1206,7 +1776,11 @@ export class OfflineDataImportEngine {
         fyFrom: detectedFyFrom,
         fyTo: detectedFyTo,
         isFyDetected,
-        fyDetectionSource
+        fyStatus: isFyDetected ? 'DETECTED' : 'REVIEW_REQUIRED',
+        fyExplanation: isFyDetected ? undefined : 'Financial year was not detected in the source data.',
+        fyDetectionSource: isFyDetected ? fyDetectionSource : 'Not Detected in Source Data',
+        fySourceEvidence,
+        inferredSuggestion
       }
     };
   }
@@ -1503,6 +2077,95 @@ export class OfflineDataImportEngine {
     };
   }
 
+  /**
+   * Centralized objective audit exception rules
+   */
+  public static evaluateVoucherAuditException(
+    v: CanonicalVoucher,
+    datasetId: string,
+    index: number
+  ): CanonicalAuditException | null {
+    const typeStr = (v.voucherType || '').toLowerCase();
+
+    // 1. High-Value Transaction (Cash / Bank / Payment / Receipt >= 200,000)
+    if (v.amount !== null && v.amount >= 200000 && (typeStr.includes('paym') || typeStr.includes('receipt') || typeStr.includes('cash'))) {
+      return {
+        id: `EXC-${datasetId}-${index + 1}`,
+        risk: 'HIGH',
+        riskScore: 88,
+        date: v.date,
+        voucherNo: v.voucherNumber,
+        voucherType: v.voucherType,
+        ledger: v.partyLedger,
+        party: v.partyLedger,
+        amount: v.amount,
+        exceptionType: 'Potential High-Value Transaction',
+        reason: 'Potential high-value transaction — review applicability of relevant tax provisions based on transaction nature, aggregation and payment/receipt context.',
+        status: 'Pending',
+        traceability: v.traceability
+      };
+    }
+
+    // 2. Unusual Pattern - Round Sum (Multiples of 10k >= 50k)
+    if (v.amount !== null && v.amount % 10000 === 0 && v.amount >= 50000) {
+      return {
+        id: `EXC-${datasetId}-${index + 1}`,
+        risk: 'MEDIUM',
+        riskScore: 65,
+        date: v.date,
+        voucherNo: v.voucherNumber,
+        voucherType: v.voucherType,
+        ledger: v.partyLedger,
+        party: v.partyLedger,
+        amount: v.amount,
+        exceptionType: 'Unusual Pattern - Round Sum',
+        reason: `Unusual round sum transaction amount of ₹${v.amount.toLocaleString('en-IN')}; review against supporting purchase or service documentation.`,
+        status: 'Pending',
+        traceability: v.traceability
+      };
+    }
+
+    // 3. Weekend / Sunday Transaction
+    if (v.date && new Date(v.date).getDay() === 0) {
+      return {
+        id: `EXC-${datasetId}-${index + 1}`,
+        risk: 'LOW',
+        riskScore: 38,
+        date: v.date,
+        voucherNo: v.voucherNumber,
+        voucherType: v.voucherType,
+        ledger: v.partyLedger,
+        party: v.partyLedger,
+        amount: v.amount,
+        exceptionType: 'Risk Indicator - Weekend Transaction',
+        reason: `Transaction posted on Sunday (${v.date}). Recommended to cross-check against operational authorization registers.`,
+        status: 'Pending',
+        traceability: v.traceability
+      };
+    }
+
+    // 4. Unbalanced Voucher
+    if (!v.isBalanced && v.difference > 0.05) {
+      return {
+        id: `EXC-${datasetId}-${index + 1}`,
+        risk: 'HIGH',
+        riskScore: 92,
+        date: v.date,
+        voucherNo: v.voucherNumber,
+        voucherType: v.voucherType,
+        ledger: v.partyLedger,
+        party: v.partyLedger,
+        amount: v.amount,
+        exceptionType: 'Potential Compliance Concern - Unbalanced Voucher',
+        reason: `Debit and Credit entries do not balance (discrepancy of ₹${v.difference.toFixed(2)}). Requires ledger reconciliation.`,
+        status: 'Pending',
+        traceability: v.traceability
+      };
+    }
+
+    return null;
+  }
+
   // =========================================================================
   // 5. COMMIT & PERSISTENCE TO LOCAL DESKTOP STORAGE
   // =========================================================================
@@ -1558,70 +2221,9 @@ export class OfflineDataImportEngine {
       canonicalVouchers.push(cVoucher);
 
       // Audit Intelligence: Professional, objective risk language (no unsupported fraud/violation claims)
-      if (v.amount !== null && v.amount >= 200000 && (typeStr.includes('paym') || typeStr.includes('receipt') || typeStr.includes('cash'))) {
-        canonicalExceptions.push({
-          id: `EXC-${datasetId}-${i + 1}`,
-          risk: 'HIGH',
-          riskScore: 88,
-          date: v.date,
-          voucherNo: v.voucherNumber,
-          voucherType: v.voucherType,
-          ledger: v.partyLedger,
-          party: v.partyLedger,
-          amount: v.amount,
-          exceptionType: 'Potential High-Value Transaction',
-          reason: 'Potential high-value transaction — review applicability of relevant tax provisions based on transaction nature, aggregation and payment/receipt context.',
-          status: 'Pending',
-          traceability: v.traceability
-        });
-      } else if (v.amount !== null && v.amount % 10000 === 0 && v.amount >= 50000) {
-        canonicalExceptions.push({
-          id: `EXC-${datasetId}-${i + 1}`,
-          risk: 'MEDIUM',
-          riskScore: 65,
-          date: v.date,
-          voucherNo: v.voucherNumber,
-          voucherType: v.voucherType,
-          ledger: v.partyLedger,
-          party: v.partyLedger,
-          amount: v.amount,
-          exceptionType: 'Unusual Pattern - Round Sum',
-          reason: `Unusual round sum transaction amount of ₹${v.amount.toLocaleString('en-IN')}; review against supporting purchase or service documentation.`,
-          status: 'Pending',
-          traceability: v.traceability
-        });
-      } else if (v.date && new Date(v.date).getDay() === 0) {
-        canonicalExceptions.push({
-          id: `EXC-${datasetId}-${i + 1}`,
-          risk: 'LOW',
-          riskScore: 38,
-          date: v.date,
-          voucherNo: v.voucherNumber,
-          voucherType: v.voucherType,
-          ledger: v.partyLedger,
-          party: v.partyLedger,
-          amount: v.amount,
-          exceptionType: 'Risk Indicator - Weekend Transaction',
-          reason: `Transaction posted on Sunday (${v.date}). Recommended to cross-check against operational authorization registers.`,
-          status: 'Pending',
-          traceability: v.traceability
-        });
-      } else if (!v.isBalanced && v.difference > 0.05) {
-        canonicalExceptions.push({
-          id: `EXC-${datasetId}-${i + 1}`,
-          risk: 'HIGH',
-          riskScore: 92,
-          date: v.date,
-          voucherNo: v.voucherNumber,
-          voucherType: v.voucherType,
-          ledger: v.partyLedger,
-          party: v.partyLedger,
-          amount: v.amount,
-          exceptionType: 'Potential Compliance Concern - Unbalanced Voucher',
-          reason: `Debit and Credit entries do not balance (discrepancy of ₹${v.difference.toFixed(2)}). Requires ledger reconciliation.`,
-          status: 'Pending',
-          traceability: v.traceability
-        });
+      const exc = OfflineDataImportEngine.evaluateVoucherAuditException(v, datasetId, i);
+      if (exc) {
+        canonicalExceptions.push(exc);
       }
     }
 
@@ -1634,10 +2236,11 @@ export class OfflineDataImportEngine {
       bankAccounts: rawLedgers.filter((l: any) => (l.parent || '').toLowerCase().includes('bank')).length
     };
 
-    const companyName = overrides?.companyName || rawRecords.company || null;
-    const fyFrom = overrides?.financialYearFrom || rawRecords.fyFrom || null;
-    const fyTo = overrides?.financialYearTo || rawRecords.fyTo || null;
-    const isDemoData = overrides?.isDemoData || false;
+    const companyName = overrides?.companyName?.trim() || rawRecords.company || null;
+    const fyFrom = overrides?.financialYearFrom?.trim() || rawRecords.fyFrom || null;
+    const fyTo = overrides?.financialYearTo?.trim() || rawRecords.fyTo || null;
+    const isDemoData = Boolean(overrides?.isDemoData);
+    const isFinancialYearDetected = Boolean(fyFrom && fyTo);
 
     const metadata: ImportedDatasetSummary = {
       id: datasetId,
@@ -1651,8 +2254,13 @@ export class OfflineDataImportEngine {
       companyName,
       financialYearFrom: fyFrom,
       financialYearTo: fyTo,
-      isFinancialYearDetected: Boolean(fyFrom && fyTo),
-      financialYearDetectionSource: rawRecords.fyDetectionSource || (fyFrom ? 'User Specified' : 'Not Detected'),
+      isFinancialYearDetected,
+      financialYearStatus: isFinancialYearDetected ? 'DETECTED' : 'REVIEW_REQUIRED',
+      financialYearExplanation: isFinancialYearDetected ? undefined : 'Financial year was not detected in the source data.',
+      financialYearDetectionSource: isFinancialYearDetected
+        ? (overrides?.financialYearFrom ? 'User Specified Override' : (rawRecords.fyDetectionSource || 'Detected in Source'))
+        : 'Not Detected in Source Data',
+      financialYearSourceEvidence: rawRecords.fySourceEvidence,
       importedAt: nowIso,
       totalRecords: rawVouchers.length + rawLedgers.length + rawStock.length,
       masterCounts,

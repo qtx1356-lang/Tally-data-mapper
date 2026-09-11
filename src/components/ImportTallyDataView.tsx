@@ -58,6 +58,7 @@ export const ImportTallyDataView: React.FC<ImportTallyDataViewProps> = ({
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   // Parsed Data State
+  const [importSessionId, setImportSessionId] = useState<string | null>(null);
   const [parsedPreview, setParsedPreview] = useState<RawParsedPreview | null>(null);
   const [rawRecords, setRawRecords] = useState<any>(null);
   const [mappings, setMappings] = useState<FieldMappingItem[]>([]);
@@ -67,8 +68,8 @@ export const ImportTallyDataView: React.FC<ImportTallyDataViewProps> = ({
 
   // User Overrides for Target Company & Financial Year (never fabricate!)
   const [overrideCompany, setOverrideCompany] = useState<string>('');
-  const [overrideFyFrom, setOverrideFyFrom] = useState<string>('2024-04-01');
-  const [overrideFyTo, setOverrideFyTo] = useState<string>('2025-03-31');
+  const [overrideFyFrom, setOverrideFyFrom] = useState<string>('');
+  const [overrideFyTo, setOverrideFyTo] = useState<string>('');
 
   // Source Traceability Inspector Modal
   const [traceabilityModalData, setTraceabilityModalData] = useState<SourceTraceability | null>(null);
@@ -204,8 +205,10 @@ export const ImportTallyDataView: React.FC<ImportTallyDataViewProps> = ({
         }
 
         if (xhr.status >= 200 && xhr.status < 300 && data.success) {
+          setImportSessionId(data.importSessionId || null);
           setParsedPreview(data.preview);
-          setRawRecords(data.rawRecords);
+          // Zero large dataset replication in React memory:
+          setRawRecords(null);
           setMappings(data.mappings || []);
           setQualityReport(data.qualityReport || null);
 
@@ -216,9 +219,12 @@ export const ImportTallyDataView: React.FC<ImportTallyDataViewProps> = ({
             setOverrideCompany(file ? file.name.replace(/\.[^/.]+$/, '') : 'Imported Company');
           }
 
-          if (data.preview?.detectedFinancialYear?.isDetected) {
-            setOverrideFyFrom(data.preview.detectedFinancialYear.from || '2024-04-01');
-            setOverrideFyTo(data.preview.detectedFinancialYear.to || '2025-03-31');
+          if (data.preview?.detectedFinancialYear?.isDetected && data.preview.detectedFinancialYear.from && data.preview.detectedFinancialYear.to) {
+            setOverrideFyFrom(data.preview.detectedFinancialYear.from);
+            setOverrideFyTo(data.preview.detectedFinancialYear.to);
+          } else {
+            setOverrideFyFrom('');
+            setOverrideFyTo('');
           }
 
           setCurrentStep(2);
@@ -302,9 +308,9 @@ export const ImportTallyDataView: React.FC<ImportTallyDataViewProps> = ({
     );
   };
 
-  // Commit Dataset with full overrides & persistent storage
+  // Commit Dataset with full overrides & persistent storage via importSessionId
   const handleCommitDataset = async () => {
-    if (!rawRecords || !mappings) return;
+    if ((!importSessionId && !rawRecords) || !mappings) return;
 
     setIsLoading(true);
     setLoadingMessage('Normalizing and committing dataset to persistent desktop store...');
@@ -315,15 +321,16 @@ export const ImportTallyDataView: React.FC<ImportTallyDataViewProps> = ({
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          importSessionId: importSessionId || undefined,
           fileName: file?.name || parsedPreview?.fileName || 'Imported_Data',
           fileType: selectedFormat,
           fileSize: file?.size || parsedPreview?.fileSize || 50000,
-          rawRecords,
+          rawRecords: importSessionId ? undefined : rawRecords,
           mappings,
           overrides: {
-            companyName: overrideCompany || undefined,
-            financialYearFrom: overrideFyFrom || undefined,
-            financialYearTo: overrideFyTo || undefined,
+            companyName: overrideCompany.trim() || undefined,
+            financialYearFrom: overrideFyFrom.trim() || undefined,
+            financialYearTo: overrideFyTo.trim() || undefined,
             isDemoData: false
           }
         })
@@ -638,7 +645,7 @@ export const ImportTallyDataView: React.FC<ImportTallyDataViewProps> = ({
 
             {/* Financial Year Detection Banner */}
             <div className="rounded-lg bg-slate-900/90 p-4 border border-slate-800 space-y-3">
-              <div className="flex items-center justify-between">
+              <div className="flex flex-wrap items-center justify-between gap-2">
                 <div className="flex items-center space-x-2">
                   <Calendar className="h-4 w-4 text-sky-400" />
                   <span className="text-xs font-bold text-slate-200">Financial Year Configuration:</span>
@@ -647,13 +654,55 @@ export const ImportTallyDataView: React.FC<ImportTallyDataViewProps> = ({
                       ? 'bg-emerald-950 text-emerald-300 border border-emerald-800'
                       : 'bg-amber-950 text-amber-300 border border-amber-800'
                   }`}>
-                    {parsedPreview.detectedFinancialYear.isDetected ? 'Auto-Detected' : 'Requires Confirmation'}
-                  </span>
-                  <span className="text-[11px] text-slate-400">
-                    Source: {parsedPreview.detectedFinancialYear.detectionSource}
+                    {parsedPreview.detectedFinancialYear.isDetected ? 'Auto-Detected in Source' : 'Review Required — Not Detected in Source'}
                   </span>
                 </div>
+                <span className="text-[11px] text-slate-400">
+                  Source: {parsedPreview.detectedFinancialYear.detectionSource}
+                </span>
               </div>
+
+              {!parsedPreview.detectedFinancialYear.isDetected && (
+                <div className="rounded border border-amber-900/50 bg-amber-950/20 p-2.5 text-xs text-amber-200 flex items-start space-x-2">
+                  <AlertTriangle className="h-4 w-4 text-amber-400 flex-shrink-0 mt-0.5" />
+                  <div className="space-y-1">
+                    <p className="font-semibold">Financial Year was not detected in the source data.</p>
+                    <p className="text-[11px] text-amber-300/80">
+                      In accordance with EXFIN's zero-data-fabrication policy, no default financial year (e.g. 2024-25) is assumed. You may enter dates manually, apply the derived date suggestion below, or leave empty.
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              {/* Inferred suggestion banner if dates are present in vouchers */}
+              {!parsedPreview.detectedFinancialYear.isDetected && parsedPreview.detectedFinancialYear.inferredSuggestion && (
+                <div className="rounded border border-sky-900/40 bg-sky-950/20 p-2.5 flex items-center justify-between gap-2">
+                  <div className="text-xs">
+                    <span className="text-slate-300 font-medium">Derived from transaction dates </span>
+                    <span className="text-slate-400 text-[11px]">
+                      ({parsedPreview.detectedFinancialYear.inferredSuggestion.minDate} → {parsedPreview.detectedFinancialYear.inferredSuggestion.maxDate}):{' '}
+                    </span>
+                    <span className="text-sky-300 font-mono font-bold">
+                      {parsedPreview.detectedFinancialYear.inferredSuggestion.from} to {parsedPreview.detectedFinancialYear.inferredSuggestion.to}
+                    </span>
+                    <span className="ml-1.5 px-1.5 py-0.5 rounded text-[9px] font-semibold bg-sky-900/40 text-sky-400 border border-sky-800">
+                      Inferred — Review Required
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (parsedPreview?.detectedFinancialYear?.inferredSuggestion) {
+                        setOverrideFyFrom(parsedPreview.detectedFinancialYear.inferredSuggestion.from);
+                        setOverrideFyTo(parsedPreview.detectedFinancialYear.inferredSuggestion.to);
+                      }
+                    }}
+                    className="flex-shrink-0 px-2.5 py-1 text-[11px] font-semibold rounded bg-sky-600/30 hover:bg-sky-600/50 border border-sky-500/40 text-sky-200 transition-colors"
+                  >
+                    Apply Inferred FY
+                  </button>
+                </div>
+              )}
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
                 <div>
@@ -664,6 +713,9 @@ export const ImportTallyDataView: React.FC<ImportTallyDataViewProps> = ({
                     onChange={e => setOverrideFyFrom(e.target.value)}
                     className="w-full bg-slate-950 border border-slate-700 rounded px-3 py-1.5 text-xs text-slate-100 font-mono focus:border-sky-500 outline-none"
                   />
+                  {!overrideFyFrom && (
+                    <span className="text-[10px] text-slate-500 mt-0.5 block">Optional: Leave empty if unassigned</span>
+                  )}
                 </div>
                 <div>
                   <label className="text-[11px] text-slate-400 block mb-1">Financial Year End Date (YYYY-MM-DD):</label>
@@ -673,6 +725,9 @@ export const ImportTallyDataView: React.FC<ImportTallyDataViewProps> = ({
                     onChange={e => setOverrideFyTo(e.target.value)}
                     className="w-full bg-slate-950 border border-slate-700 rounded px-3 py-1.5 text-xs text-slate-100 font-mono focus:border-sky-500 outline-none"
                   />
+                  {!overrideFyTo && (
+                    <span className="text-[10px] text-slate-500 mt-0.5 block">Optional: Leave empty if unassigned</span>
+                  )}
                 </div>
               </div>
             </div>
@@ -715,7 +770,10 @@ export const ImportTallyDataView: React.FC<ImportTallyDataViewProps> = ({
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-900">
-                  {(rawRecords?.vouchers || []).slice(0, 5).map((v: any, idx: number) => (
+                  {((parsedPreview?.sampleRecords || parsedPreview?.rawSampleData?.vouchers || rawRecords?.vouchers || []) as any[]).slice(0, 5).map((v: any, idx: number) => {
+                    const debitAmount = v.totalDebit !== undefined ? v.totalDebit : (v.isDebit === true ? v.amount : 0);
+                    const creditAmount = v.totalCredit !== undefined ? v.totalCredit : (v.isDebit === false ? v.amount : 0);
+                    return (
                     <tr key={idx} className="hover:bg-slate-900/50">
                       <td className="p-2.5 text-sky-400 font-semibold">
                         {v.voucherNumber || <span className="text-amber-400">[Missing]</span>}
@@ -725,13 +783,13 @@ export const ImportTallyDataView: React.FC<ImportTallyDataViewProps> = ({
                         {v.date || <span className="text-amber-400">[Missing Date]</span>}
                       </td>
                       <td className="p-2.5 text-slate-200">
-                        {v.partyLedger || <span className="text-amber-400">[Review Required]</span>}
+                        {v.partyLedger || v.partyLedgerName || <span className="text-amber-400">[Review Required]</span>}
                       </td>
                       <td className="p-2.5 text-right font-bold text-emerald-400">
-                        {v.totalDebit > 0 ? v.totalDebit.toLocaleString('en-IN') : '-'}
+                        {debitAmount > 0 ? debitAmount.toLocaleString('en-IN') : '-'}
                       </td>
                       <td className="p-2.5 text-right font-bold text-sky-400">
-                        {v.totalCredit > 0 ? v.totalCredit.toLocaleString('en-IN') : '-'}
+                        {creditAmount > 0 ? creditAmount.toLocaleString('en-IN') : '-'}
                       </td>
                       <td className="p-2.5">
                         <button
@@ -743,7 +801,8 @@ export const ImportTallyDataView: React.FC<ImportTallyDataViewProps> = ({
                         </button>
                       </td>
                     </tr>
-                  ))}
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
@@ -1110,6 +1169,7 @@ export const ImportTallyDataView: React.FC<ImportTallyDataViewProps> = ({
               <tr>
                 <th className="p-3">Dataset Name</th>
                 <th className="p-3">Company</th>
+                <th className="p-3">Financial Year</th>
                 <th className="p-3">Format</th>
                 <th className="p-3">Records</th>
                 <th className="p-3">Quality Score</th>
@@ -1121,13 +1181,14 @@ export const ImportTallyDataView: React.FC<ImportTallyDataViewProps> = ({
             <tbody className="divide-y divide-slate-900 font-mono">
               {datasetsList.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="p-6 text-center text-slate-500 font-sans">
+                  <td colSpan={9} className="p-6 text-center text-slate-500 font-sans">
                     No imported datasets found. Upload an XML, JSON, or Excel file above to begin.
                   </td>
                 </tr>
               ) : (
                 datasetsList.map(ds => {
                   const isActive = ds.isActive || ds.id === activeDataset?.id;
+                  const hasFy = Boolean(ds.financialYearFrom && ds.financialYearTo);
                   return (
                     <tr
                       key={ds.id}
@@ -1147,6 +1208,17 @@ export const ImportTallyDataView: React.FC<ImportTallyDataViewProps> = ({
                         )}
                       </td>
                       <td className="p-3 text-slate-300">{ds.companyName}</td>
+                      <td className="p-3">
+                        {hasFy ? (
+                          <span className="text-slate-200 font-mono text-xs">
+                            {ds.financialYearFrom} → {ds.financialYearTo}
+                          </span>
+                        ) : (
+                          <span className="rounded bg-amber-950/60 border border-amber-800 text-amber-300 px-2 py-0.5 text-[10px] font-sans font-semibold">
+                            Not Detected (Review Required)
+                          </span>
+                        )}
+                      </td>
                       <td className="p-3">
                         <span className="rounded bg-slate-900 border border-slate-800 px-2 py-0.5 text-[10px] text-sky-400 font-bold">
                           {ds.sourceFileType}

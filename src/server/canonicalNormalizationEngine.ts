@@ -50,6 +50,7 @@ import { canonicalInventoryEngine } from './canonicalInventoryEngine';
 import { canonicalTaxCostCentreEngine } from './canonicalTaxCostCentreEngine';
 import { canonicalPayrollBankingEngine } from './canonicalPayrollBankingEngine';
 import { GraphNode, GraphEdge, RelationshipType } from '../types/phase31ObjectGraph';
+import { normalizeDebitCredit } from './debitCreditNormalization';
 
 export class CanonicalNormalizationEngine {
   // In-memory canonical repositories indexed by Canonical ID
@@ -941,9 +942,16 @@ export class CanonicalNormalizationEngine {
       if (p) partyId = p.partyId;
     }
 
-    // Monetary Amount preservation
+    // Monetary Amount preservation using centralized strict debit/credit normalization
     const rawAmount = raw.amount !== undefined ? raw.amount : 0;
-    const isDebit = raw.isDebit !== undefined ? Boolean(raw.isDebit) : (typeof rawAmount === 'number' && rawAmount < 0) || raw.amountType === 'Dr';
+    const norm = normalizeDebitCredit({
+      isDebit: raw.isDebit,
+      isCredit: raw.isCredit,
+      isDeemedPositive: raw.isDeemedPositive !== undefined ? raw.isDeemedPositive : raw.ISDEEMEDPOSITIVE,
+      type: raw.amountType || raw.type || raw.drCr,
+      rawAmount
+    });
+    const isDebit = norm.isDebit !== null ? norm.isDebit : ((typeof rawAmount === 'number' && rawAmount < 0) || raw.amountType === 'Dr');
     const currency = raw.currency ? String(raw.currency).trim() : 'INR';
 
     const amount: PreservedMonetaryValue = {

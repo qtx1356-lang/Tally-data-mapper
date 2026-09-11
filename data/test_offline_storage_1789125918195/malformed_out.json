@@ -1,0 +1,3 @@
+{
+  "vouchers": [
+    {"id":"vch-stream-1","voucherNumber":"VCH-1","voucherType":"Journal","date":null,"partyLedger":null,"amount":null,"totalDebit":0,"totalCredit":0,"narration":null,"entries":[],"isBalanced":false,"difference":0,"reviewRequired":true,"reviewReasons":["Missing or invalid voucher date in source","Zero or missing amount in voucher lines","No source ledger entries detected"],"sourceFile":"malformed.json","datasetId":"","traceability":{"sourceFileType":"JSON","sourceFile":"malformed.json","jsonPath":"$.DayBook[0]","sourceField":"VCH-1"}}

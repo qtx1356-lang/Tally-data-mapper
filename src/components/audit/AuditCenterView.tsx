@@ -31,7 +31,11 @@ export const AuditCenterView: React.FC<AuditCenterViewProps> = ({ selectedCompan
 
   const summary: AuditSummary = {
     companyName: selectedCompany?.name || 'No Company Selected',
-    financialYear: '2024-25',
+    financialYear: (selectedCompany?.financialYearFrom && selectedCompany?.financialYearTo)
+      ? `${selectedCompany.financialYearFrom.substring(0, 4)}-${selectedCompany.financialYearTo.substring(2, 4)}`
+      : (selectedCompany?.startingFrom && selectedCompany?.endingAt)
+        ? `${selectedCompany.startingFrom.substring(0, 4)}-${selectedCompany.endingAt.substring(2, 4)}`
+        : 'Not Specified',
     dataConnectionStatus: connectionStatus,
     lastScanDate: '2024-05-20 14:30',
     totalVouchersAnalysed: 12540,

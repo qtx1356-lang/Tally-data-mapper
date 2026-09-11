@@ -1,0 +1,91 @@
+{
+  "id": "ds-offline-1789139428432-o57oy",
+  "metadata": {
+    "id": "ds-offline-1789139428432-o57oy",
+    "name": "RETRY CORP (JSON)",
+    "description": "Imported from retry_test.json with 1 vouchers and 0 masters.",
+    "sourceFileName": "retry_test.json",
+    "sourceFileType": "JSON",
+    "sourceFileSize": 1000,
+    "companyName": "RETRY CORP",
+    "financialYearFrom": null,
+    "financialYearTo": null,
+    "isFinancialYearDetected": false,
+    "financialYearStatus": "REVIEW_REQUIRED",
+    "financialYearExplanation": "Financial year was not detected in the source data.",
+    "financialYearDetectionSource": "Not Detected in Source Data",
+    "importedAt": "2026-09-11T15:10:28.432Z",
+    "totalRecords": 1,
+    "masterCounts": {
+      "ledgers": 0,
+      "groups": 0,
+      "parties": 0,
+      "stockItems": 0,
+      "costCentres": 0,
+      "bankAccounts": 0
+    },
+    "voucherCounts": {
+      "total": 1,
+      "sales": 0,
+      "purchase": 0,
+      "payment": 0,
+      "receipt": 0,
+      "journal": 0,
+      "contra": 0,
+      "other": 1
+    },
+    "dataQualityScore": 100,
+    "dataQualityReport": {
+      "score": 100,
+      "totalRecordsChecked": 1,
+      "passedRecords": 1,
+      "duplicateVouchers": 0,
+      "missingDates": 0,
+      "invalidAmounts": 0,
+      "unbalancedVouchers": 0,
+      "orphanLedgers": 0,
+      "unmappedFieldsCount": 0,
+      "reviewRequiredFieldsCount": 0,
+      "warnings": [],
+      "errors": [],
+      "recommendations": []
+    },
+    "status": "Ready",
+    "mappingsCount": {
+      "total": 0,
+      "mapped": 0,
+      "reviewRequired": 0,
+      "unmapped": 0
+    },
+    "isActive": true,
+    "isDemoData": false
+  },
+  "companies": [
+    {
+      "name": "RETRY CORP",
+      "financialYearFrom": null,
+      "financialYearTo": null,
+      "id": "ds-offline-1789139428432-o57oy"
+    }
+  ],
+  "groups": [],
+  "ledgers": [],
+  "parties": [],
+  "vouchers": [
+    {
+      "id": "ret-1",
+      "voucherNumber": "RET-1",
+      "amount": 100,
+      "date": "2025-01-01",
+      "datasetId": "ds-offline-1789139428432-o57oy",
+      "sourceFile": "retry_test.json"
+    }
+  ],
+  "voucherLines": [],
+  "stockItems": [],
+  "costCentres": [],
+  "taxRecords": [],
+  "bankAccounts": [],
+  "exceptions": [],
+  "mappings": []
+}

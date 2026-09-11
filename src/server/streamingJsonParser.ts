@@ -1,0 +1,886 @@
+/**
+ * EXFIN Tally Audit Platform - Memory-Safe Streaming JSON Parser
+ * 
+ * Provides true incremental streaming JSON parsing for large Tally exports (e.g. 126.5 MB DayBook.json).
+ * 
+ * INVARIANT:
+ * Does NOT call `fs.readFileSync(filePath, 'utf-8')` or `JSON.parse(entireFile)`.
+ * Reads in 64KB/128KB chunks, parses voucher items one-by-one, extracts canonical voucher lines,
+ * normalizes debit/credit with zero truthiness hazards, streams canonical records directly to disk,
+ * and maintains only a bounded preview (first 50 records) and aggregate statistics in memory.
+ */
+
+import fs from 'fs';
+import path from 'path';
+import { 
+  CanonicalVoucher, 
+  CanonicalVoucherLine, 
+  ImportFileFormat, 
+  SourceTraceability 
+} from '../types/offlineDataImport';
+import { normalizeDebitCredit } from './debitCreditNormalization';
+
+export interface StreamingParseProgress {
+  phase: 'Uploading' | 'Processing' | 'Normalizing' | 'Mapping' | 'Quality Check' | 'Finalizing' | 'Completed' | 'Failed';
+  recordsProcessed: number;
+  totalBytes: number;
+  bytesRead: number;
+  percent: number;
+}
+
+export interface StreamingParseResult {
+  detectedCompany: string | null;
+  detectedFinancialYear: {
+    from: string | null;
+    to: string | null;
+    isDetected: boolean;
+    status: 'DETECTED' | 'REVIEW_REQUIRED';
+  };
+  totalVouchers: number;
+  totalLedgers: number;
+  totalStockItems: number;
+  totalDebit: number;
+  totalCredit: number;
+  isBalanced: boolean;
+  balanceDifference: number;
+  sampleVouchers: CanonicalVoucher[]; // Bounded preview: up to 50 records
+  sourceTraceabilitySamples: SourceTraceability[];
+  preview: any;
+  recordsFilePath: string; // Disk path where the canonical records are stored
+}
+
+export class StreamingJsonParser {
+  private static readonly CHUNK_SIZE = 128 * 1024; // 128 KB buffer per read
+  private static readonly MAX_PREVIEW_RECORDS = 50;
+
+  /**
+   * Parse a Tally JSON file incrementally using streaming buffers.
+   * @param filePath Path to the input JSON file on disk
+   * @param outputRecordsFilePath Path where parsed canonical records will be written on disk
+   * @param originalFileName Original uploaded filename for traceability
+   * @param onProgress Optional progress callback
+   */
+  public static async parseFile(
+    filePath: string,
+    outputRecordsFilePath: string,
+    originalFileName: string,
+    onProgress?: (p: StreamingParseProgress) => void
+  ): Promise<StreamingParseResult> {
+    const stats = fs.statSync(filePath);
+    const totalBytes = stats.size;
+    let bytesRead = 0;
+
+    const fileName = originalFileName || path.basename(filePath);
+
+    // Ensure output directory exists
+    const outDir = path.dirname(outputRecordsFilePath);
+    if (!fs.existsSync(outDir)) {
+      fs.mkdirSync(outDir, { recursive: true });
+    }
+
+    // Open write stream for canonical records file
+    const outStream = fs.createWriteStream(outputRecordsFilePath, { encoding: 'utf-8' });
+    outStream.write('{\n  "vouchers": [\n');
+
+    let isFirstVoucherWritten = false;
+    let totalVouchers = 0;
+    let totalDebit = 0;
+    let totalCredit = 0;
+    const sampleVouchers: CanonicalVoucher[] = [];
+    const sourceTraceabilitySamples: SourceTraceability[] = [];
+
+    // Header metadata tracking
+    let detectedCompany: string | null = null;
+    let rawStartingFrom: string | null = null;
+    let rawEndingAt: string | null = null;
+    let rawFyFrom: string | null = null;
+    let rawFyTo: string | null = null;
+
+    let minDate: string | null = null;
+    let maxDate: string | null = null;
+
+    // Parser State Machine
+    // States: 'HEADER' | 'IN_ARRAY' | 'FOOTER'
+    let state: 'HEADER' | 'IN_ARRAY' | 'FOOTER' = 'HEADER';
+    let objectDepth = 0;
+    let currentObjectChunks: string[] = [];
+
+    // Pre-array buffer & key stack to capture header metadata and exact container hierarchy
+    let headerBuffer = '';
+    const MAX_HEADER_BUFFER = 256 * 1024; // Keep at most 256KB for header metadata
+
+    let detectedContainerPath = '$';
+    const keyStack: (string | null)[] = [];
+    let currentPendingKey: string | null = null;
+    let inHeaderString = false;
+    let isHeaderEscaped = false;
+    let headerStrBuffer = '';
+    let lastHeaderFinishedStr = '';
+
+    const readStream = fs.createReadStream(filePath, {
+      encoding: 'utf-8',
+      highWaterMark: this.CHUNK_SIZE
+    });
+
+    let lastProgressReportTime = Date.now();
+
+    const processSingleVoucherObject = (objStr: string) => {
+      let rawVch: any;
+      try {
+        rawVch = JSON.parse(objStr);
+      } catch (e) {
+        // Skip malformed individual segment if corrupted
+        return;
+      }
+
+      // Check if wrapped voucher e.g. { "VOUCHER": { ... } } or { "voucher": { ... } }
+      let isWrapped = false;
+      let wrapperKey: string | null = null;
+      let v: any = rawVch;
+
+      if (rawVch && typeof rawVch === 'object') {
+        if (rawVch.VOUCHER && typeof rawVch.VOUCHER === 'object') {
+          v = rawVch.VOUCHER;
+          isWrapped = true;
+          wrapperKey = 'VOUCHER';
+        } else if (rawVch.voucher && typeof rawVch.voucher === 'object') {
+          v = rawVch.voucher;
+          isWrapped = true;
+          wrapperKey = 'voucher';
+        }
+      }
+
+      totalVouchers++;
+      const vchIdx = totalVouchers - 1;
+
+      // Construct exact voucher JSON path reflecting genuine source hierarchy
+      const vchBasePath = detectedContainerPath === '$' ? `$[${vchIdx}]` : `${detectedContainerPath}[${vchIdx}]`;
+      const voucherJsonPath = isWrapped && wrapperKey ? `${vchBasePath}.${wrapperKey}` : vchBasePath;
+
+      // STRICT ZERO-FABRICATION: Never generate VCH-* or default 'Journal'
+      const vchNumberRaw = v.voucherNumber || v.VOUCHERNUMBER || v.number || v.vchNo || v.VchNo || v.invoiceNo || null;
+      const vchNumber = vchNumberRaw ? String(vchNumberRaw).trim() : null;
+
+      const vchTypeRaw = v.voucherType || v.VOUCHERTYPENAME || v.VOUCHERTYPE || v.type || v.Type || v.vchType || v.VchType || null;
+      const vchType = vchTypeRaw ? String(vchTypeRaw).trim() : null;
+      
+      // Date normalization
+      let vDate: string | null = null;
+      const rawDate = v.date || v.DATE || v.Date || null;
+      if (rawDate) {
+        const strDate = String(rawDate).trim();
+        if (/^\d{8}$/.test(strDate)) {
+          vDate = `${strDate.substring(0, 4)}-${strDate.substring(4, 6)}-${strDate.substring(6, 8)}`;
+        } else if (/^\d{4}-\d{2}-\d{2}$/.test(strDate)) {
+          vDate = strDate;
+        } else {
+          vDate = strDate;
+        }
+      }
+
+      if (vDate) {
+        if (!minDate || vDate < minDate) minDate = vDate;
+        if (!maxDate || vDate > maxDate) maxDate = vDate;
+      }
+
+      const partyNameRaw = v.partyLedgerName || v.PARTYLEDGERNAME || v.party || v.Party || v.partyName || null;
+      const partyName = partyNameRaw ? String(partyNameRaw).trim() : null;
+      const narrationRaw = v.narration || v.NARRATION || v.Narration || null;
+      const narration = narrationRaw ? String(narrationRaw).trim() : null;
+
+      // Extract ledger lines and detect the exact source hierarchy segments for accurate child path construction
+      let rawEntriesPathSegments: string[] = [];
+      let rawEntries: any[] = [];
+      if (Array.isArray(v.entries)) { 
+        rawEntries = v.entries; 
+        rawEntriesPathSegments = ['entries']; 
+      } else if (Array.isArray(v.ALLLEDGERENTRIES)) { 
+        rawEntries = v.ALLLEDGERENTRIES; 
+        rawEntriesPathSegments = ['ALLLEDGERENTRIES']; 
+      } else if (v.ALLLEDGERENTRIES && Array.isArray(v.ALLLEDGERENTRIES.LEDGERENTRIES)) { 
+        // Nested object: ALLLEDGERENTRIES -> LEDGERENTRIES array
+        rawEntries = v.ALLLEDGERENTRIES.LEDGERENTRIES; 
+        rawEntriesPathSegments = ['ALLLEDGERENTRIES', 'LEDGERENTRIES']; 
+      } else if (Array.isArray(v['ALLLEDGERENTRIES.LIST'])) { 
+        // Literal single Tally key with dot
+        rawEntries = v['ALLLEDGERENTRIES.LIST']; 
+        rawEntriesPathSegments = ['ALLLEDGERENTRIES.LIST']; 
+      } else if (Array.isArray(v.LEDGERENTRIES)) { 
+        rawEntries = v.LEDGERENTRIES; 
+        rawEntriesPathSegments = ['LEDGERENTRIES']; 
+      } else if (Array.isArray(v.ledgerEntries)) { 
+        rawEntries = v.ledgerEntries; 
+        rawEntriesPathSegments = ['ledgerEntries']; 
+      } else if (Array.isArray(v.lines)) { 
+        rawEntries = v.lines; 
+        rawEntriesPathSegments = ['lines']; 
+      } else if (v.ALLLEDGERENTRIES && v.ALLLEDGERENTRIES.LEDGERENTRIES && typeof v.ALLLEDGERENTRIES.LEDGERENTRIES === 'object') {
+        rawEntries = [v.ALLLEDGERENTRIES.LEDGERENTRIES];
+        rawEntriesPathSegments = ['ALLLEDGERENTRIES', 'LEDGERENTRIES'];
+      } else if (v.ALLLEDGERENTRIES && typeof v.ALLLEDGERENTRIES === 'object' && !Array.isArray(v.ALLLEDGERENTRIES)) {
+        rawEntries = [v.ALLLEDGERENTRIES];
+        rawEntriesPathSegments = ['ALLLEDGERENTRIES'];
+      }
+
+      const entries: CanonicalVoucherLine[] = [];
+      let vchDebit = 0;
+      let vchCredit = 0;
+
+      rawEntries.forEach((e: any, lIdx: number) => {
+        const lNameRaw = e.ledgerName || e.LEDGERNAME || e.name || e.account || e.LedgerName || 
+                         e.Party || e.PARTYLEDGERNAME || e.partyLedger || e.party || 
+                         e.Particulars || e.particulars || null;
+        const lName = lNameRaw ? String(lNameRaw).trim() : null;
+
+        const eAmtRaw = e.amount !== undefined ? e.amount : 
+                        (e.AMOUNT !== undefined ? e.AMOUNT : 
+                        (e.Amount !== undefined ? e.Amount : 
+                        (e.total !== undefined ? e.total : 
+                        (e.netAmount !== undefined ? e.netAmount : e.rawAmount))));
+
+        // Strict Centralized Normalization with ZERO JS Truthiness Hazards
+        const norm = normalizeDebitCredit({
+          isDebit: e.isDebit,
+          isCredit: e.isCredit,
+          isDeemedPositive: e.isDeemedPositive !== undefined ? e.isDeemedPositive : e.ISDEEMEDPOSITIVE,
+          type: e.type !== undefined ? e.type : (e.TYPE !== undefined ? e.TYPE : (e.drCr || e.DR_CR || e.dr_cr)),
+          debitAmount: e.debit !== undefined ? e.debit : (e.DEBIT !== undefined ? e.DEBIT : (e.debitAmount !== undefined ? e.debitAmount : e.Debit)),
+          creditAmount: e.credit !== undefined ? e.credit : (e.CREDIT !== undefined ? e.CREDIT : (e.creditAmount !== undefined ? e.creditAmount : e.Credit)),
+          rawAmount: eAmtRaw,
+          fileFormatHint: 'JSON'
+        });
+
+        if (norm.normalizedAmount !== null && norm.isDebit !== null) {
+          if (norm.isDebit) {
+            vchDebit += norm.normalizedAmount;
+            totalDebit += norm.normalizedAmount;
+          } else {
+            vchCredit += norm.normalizedAmount;
+            totalCredit += norm.normalizedAmount;
+          }
+        }
+
+        const lineReviewRequired = !lName || norm.normalizedAmount === null || norm.direction === 'UNKNOWN' || norm.reviewRequired;
+        const lineReviewReason = !lName 
+          ? 'Missing ledger name in source entry' 
+          : (norm.normalizedAmount === null ? 'Invalid or missing line amount in source entry' : norm.reviewReason);
+
+        // Construct exact child JSON path for ledger entry based on source hierarchy
+        let entryJsonPath: string;
+        if (rawEntriesPathSegments.length > 0) {
+          const formattedSuffix = rawEntriesPathSegments.map(seg => {
+            return /^[a-zA-Z_$][a-zA-Z0-9_$]*$/.test(seg) ? `.${seg}` : `['${seg}']`;
+          }).join('');
+          entryJsonPath = `${voucherJsonPath}${formattedSuffix}[${lIdx}]`;
+        } else {
+          entryJsonPath = `${voucherJsonPath}.entries[${lIdx}]`;
+        }
+
+        const lineTraceability: SourceTraceability = {
+          sourceFileType: 'JSON' as ImportFileFormat,
+          sourceFile: fileName,
+          jsonPath: entryJsonPath,
+          sourceField: lName || null
+        };
+
+        if (sourceTraceabilitySamples.length < 20) {
+          sourceTraceabilitySamples.push(lineTraceability);
+        }
+
+        entries.push({
+          id: `line-stream-${totalVouchers}-${lIdx + 1}`,
+          ledgerName: lName,
+          amount: norm.normalizedAmount,
+          isDebit: norm.isDebit,
+          isDeemedPositive: norm.isDeemedPositive,
+          rawAmount: norm.sourceAmount,
+          sourceAmount: norm.sourceAmount,
+          normalizedAmount: norm.normalizedAmount,
+          direction: norm.direction,
+          ruleApplied: norm.ruleApplied,
+          reviewRequired: lineReviewRequired,
+          reviewReason: lineReviewReason,
+          traceability: lineTraceability
+        });
+      });
+
+      const diff = Math.abs(vchDebit - vchCredit);
+      const isBalanced = entries.length >= 2 && diff <= 0.05 && vchDebit > 0;
+      const vchAmount = vchDebit > 0 ? vchDebit : (vchCredit > 0 ? vchCredit : null);
+
+      const reviewReasons: string[] = [];
+      if (!vchNumber) reviewReasons.push('Missing voucher number in source');
+      if (!vchType) reviewReasons.push('Missing voucher type in source');
+      if (!vDate) reviewReasons.push('Missing or invalid voucher date in source');
+      if (vchAmount === null) reviewReasons.push('Zero or missing amount in voucher lines');
+      if (entries.length === 0) reviewReasons.push('No source ledger entries detected');
+      else if (!isBalanced && entries.length > 0) reviewReasons.push(`Debit/Credit imbalance: difference of ₹${diff.toFixed(2)}`);
+
+      const canonicalVoucher: CanonicalVoucher = {
+        id: `vch-stream-${totalVouchers}`,
+        voucherNumber: vchNumber,
+        voucherType: vchType,
+        date: vDate,
+        partyLedger: partyName,
+        amount: vchAmount,
+        totalDebit: vchDebit,
+        totalCredit: vchCredit,
+        narration,
+        entries,
+        isBalanced,
+        difference: diff,
+        reviewRequired: reviewReasons.length > 0,
+        reviewReasons: reviewReasons.length > 0 ? reviewReasons : undefined,
+        sourceFile: fileName,
+        datasetId: '',
+        traceability: {
+          sourceFileType: 'JSON' as ImportFileFormat,
+          sourceFile: fileName,
+          jsonPath: voucherJsonPath,
+          sourceField: vchNumber || null
+        }
+      };
+
+      // Keep up to 50 sample records for bounded UI preview
+      if (sampleVouchers.length < StreamingJsonParser.MAX_PREVIEW_RECORDS) {
+        sampleVouchers.push(canonicalVoucher);
+      }
+
+      // Incrementally stream write this voucher to disk
+      const prefix = isFirstVoucherWritten ? ',\n' : '';
+      outStream.write(prefix + '    ' + JSON.stringify(canonicalVoucher));
+      isFirstVoucherWritten = true;
+
+      // Periodically report progress
+      const now = Date.now();
+      if (now - lastProgressReportTime > 250) {
+        lastProgressReportTime = now;
+        if (onProgress) {
+          const pct = Math.min(99, Math.round((bytesRead / totalBytes) * 100));
+          onProgress({
+            phase: 'Processing',
+            recordsProcessed: totalVouchers,
+            totalBytes,
+            bytesRead,
+            percent: pct
+          });
+        }
+      }
+    };
+
+    // Stream through the file chunk-by-chunk
+    let inString = false;
+    let isEscaped = false;
+
+    await new Promise<void>((resolve, reject) => {
+      readStream.on('data', (chunk: string | Buffer) => {
+        try {
+          const text = typeof chunk === 'string' ? chunk : chunk.toString('utf-8');
+          bytesRead += Buffer.byteLength(text, 'utf-8');
+
+          for (let i = 0; i < text.length; i++) {
+            const char = text[i];
+
+            // 1. HEADER STATE: scan until array opening `[` and accurately detect container JSON path
+            if (state === 'HEADER') {
+              if (headerBuffer.length < MAX_HEADER_BUFFER) {
+                headerBuffer += char;
+              }
+
+              if (!inHeaderString) {
+                if (char === '"') {
+                  inHeaderString = true;
+                  headerStrBuffer = '';
+                } else if (char === ':') {
+                  currentPendingKey = lastHeaderFinishedStr;
+                } else if (char === '{') {
+                  keyStack.push(currentPendingKey);
+                  currentPendingKey = null;
+                } else if (char === '}') {
+                  keyStack.pop();
+                  currentPendingKey = null;
+                } else if (char === '[') {
+                  // Target array detected!
+                  state = 'IN_ARRAY';
+
+                  // Build exact detected container path from keyStack and currentPendingKey
+                  const pathSegments: string[] = [];
+                  for (const k of keyStack) {
+                    if (k) pathSegments.push(k);
+                  }
+                  if (currentPendingKey) {
+                    pathSegments.push(currentPendingKey);
+                  }
+
+                  if (pathSegments.length === 0) {
+                    detectedContainerPath = '$';
+                  } else {
+                    detectedContainerPath = '$' + pathSegments.map(p => {
+                      return /^[a-zA-Z_$][a-zA-Z0-9_$]*$/.test(p) ? `.${p}` : `['${p}']`;
+                    }).join('');
+                  }
+
+                  // Inspect header buffer for Company & FY
+                  const compMatch = headerBuffer.match(/"(?:COMPANY|companyName|company|NAME)"\s*:\s*"([^"]+)"/i);
+                  if (compMatch) detectedCompany = compMatch[1].trim();
+
+                  const startMatch = headerBuffer.match(/"(?:STARTINGFROM|from|startDate|fromPeriod)"\s*:\s*"([^"]+)"/i);
+                  if (startMatch) rawStartingFrom = startMatch[1].trim();
+
+                  const endMatch = headerBuffer.match(/"(?:ENDINGAT|to|endDate|toPeriod)"\s*:\s*"([^"]+)"/i);
+                  if (endMatch) rawEndingAt = endMatch[1].trim();
+
+                  const fyFromMatch = headerBuffer.match(/"financialYearFrom"\s*:\s*"([^"]+)"/i);
+                  if (fyFromMatch) rawFyFrom = fyFromMatch[1].trim();
+
+                  const fyToMatch = headerBuffer.match(/"financialYearTo"\s*:\s*"([^"]+)"/i);
+                  if (fyToMatch) rawFyTo = fyToMatch[1].trim();
+                }
+              } else {
+                if (isHeaderEscaped) {
+                  isHeaderEscaped = false;
+                  headerStrBuffer += char;
+                } else if (char === '\\') {
+                  isHeaderEscaped = true;
+                  headerStrBuffer += char;
+                } else if (char === '"') {
+                  inHeaderString = false;
+                  lastHeaderFinishedStr = headerStrBuffer;
+                  headerStrBuffer = '';
+                } else {
+                  headerStrBuffer += char;
+                }
+              }
+              continue;
+            }
+
+            // 2. IN_ARRAY STATE: incrementally parse objects `{ ... }`
+            if (state === 'IN_ARRAY') {
+              if (objectDepth > 0) {
+                currentObjectChunks.push(char);
+              }
+
+              if (!inString) {
+                if (char === '"') {
+                  inString = true;
+                } else if (char === '{') {
+                  if (objectDepth === 0) {
+                    currentObjectChunks = ['{'];
+                  }
+                  objectDepth++;
+                } else if (char === '}') {
+                  objectDepth--;
+                  if (objectDepth === 0) {
+                    // Complete item assembled
+                    const objStr = currentObjectChunks.join('');
+                    currentObjectChunks = [];
+                    processSingleVoucherObject(objStr);
+                  }
+                } else if (char === ']' && objectDepth === 0) {
+                  // End of array
+                  state = 'FOOTER';
+                } else if (objectDepth === 0 && char !== ',' && !/\s/.test(char)) {
+                  throw new Error(`Malformed JSON: unexpected character '${char}' in array`);
+                }
+              } else {
+                if (isEscaped) {
+                  isEscaped = false;
+                } else if (char === '\\') {
+                  isEscaped = true;
+                } else if (char === '"') {
+                  inString = false;
+                }
+              }
+              continue;
+            }
+
+            // 3. FOOTER STATE
+            if (state === 'FOOTER') {
+              // Nothing more needed after main vouchers array
+            }
+          }
+        } catch (streamDataErr) {
+          readStream.destroy();
+          reject(streamDataErr);
+        }
+      });
+
+      readStream.on('end', () => {
+        if (objectDepth > 0 || inString || state === 'IN_ARRAY') {
+          return reject(new Error('Malformed JSON: unexpected end of stream with unclosed syntax or array'));
+        }
+        if (totalVouchers === 0 && state === 'HEADER') {
+          return reject(new Error('Invalid Tally JSON data: no vouchers or array structure found'));
+        }
+        resolve();
+      });
+
+      readStream.on('error', (err) => {
+        reject(err);
+      });
+    });
+
+    // Close output stream
+    outStream.write('\n  ],\n  "ledgers": [],\n  "stockItems": []\n}\n');
+    await new Promise<void>((res) => outStream.end(res));
+
+    // Resolve financial year strictly without fabrication
+    let fyFrom: string | null = null;
+    let fyTo: string | null = null;
+    let isFyDetected = false;
+
+    if (rawStartingFrom && rawEndingAt) {
+      fyFrom = StreamingJsonParser.normalizeDateString(rawStartingFrom);
+      fyTo = StreamingJsonParser.normalizeDateString(rawEndingAt);
+      isFyDetected = Boolean(fyFrom && fyTo);
+    } else if (rawFyFrom && rawFyTo) {
+      fyFrom = StreamingJsonParser.normalizeDateString(rawFyFrom);
+      fyTo = StreamingJsonParser.normalizeDateString(rawFyTo);
+      isFyDetected = Boolean(fyFrom && fyTo);
+    } else {
+      isFyDetected = false;
+      fyFrom = null;
+      fyTo = null;
+    }
+
+    const balanceDifference = Math.abs(totalDebit - totalCredit);
+    const isBalanced = totalVouchers >= 2 && balanceDifference <= 0.05 && totalDebit > 0;
+
+    const boundedPreview = {
+      fileType: 'JSON' as ImportFileFormat,
+      fileName: originalFileName,
+      fileSize: totalBytes,
+      detectedCompany,
+      detectedFinancialYear: {
+        from: fyFrom,
+        to: fyTo,
+        isDetected: isFyDetected,
+        status: isFyDetected ? 'DETECTED' : 'REVIEW_REQUIRED',
+        derivedFromVouchersSuggestion: (!isFyDetected && minDate && maxDate) ? {
+          earliestVoucherDate: minDate,
+          latestVoucherDate: maxDate
+        } : undefined
+      },
+      rawSampleData: {
+        vouchers: sampleVouchers.slice(0, 50)
+      },
+      entitiesDetected: [
+        {
+          name: 'Vouchers',
+          count: totalVouchers,
+          sampleFields: ['voucherNumber', 'voucherType', 'date', 'partyLedgerName', 'amount', 'entries']
+        }
+      ],
+      sampleRecords: sampleVouchers.slice(0, 50),
+      counts: {
+        vouchers: totalVouchers,
+        ledgers: 0,
+        stockItems: 0,
+        totalDebit,
+        totalCredit
+      },
+      auditSummary: {
+        totalVouchers,
+        totalDebit,
+        totalCredit,
+        difference: balanceDifference,
+        isBalanced,
+        dateRange: {
+          from: minDate,
+          to: maxDate
+        }
+      }
+    };
+
+    if (onProgress) {
+      onProgress({
+        phase: 'Completed',
+        recordsProcessed: totalVouchers,
+        totalBytes,
+        bytesRead: totalBytes,
+        percent: 100
+      });
+    }
+
+    return {
+      detectedCompany,
+      detectedFinancialYear: boundedPreview.detectedFinancialYear as any,
+      totalVouchers,
+      totalLedgers: 0,
+      totalStockItems: 0,
+      totalDebit,
+      totalCredit,
+      isBalanced,
+      balanceDifference,
+      sampleVouchers,
+      sourceTraceabilitySamples,
+      preview: boundedPreview,
+      recordsFilePath: outputRecordsFilePath
+    };
+  }
+
+  private static normalizeDateString(raw: string): string | null {
+    if (!raw) return null;
+    const trimmed = raw.trim();
+    if (/^\d{8}$/.test(trimmed)) {
+      return `${trimmed.substring(0, 4)}-${trimmed.substring(4, 6)}-${trimmed.substring(6, 8)}`;
+    }
+    if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) {
+      return trimmed;
+    }
+    return trimmed;
+  }
+
+  /**
+   * Incremental async streaming reader for records.json.
+   * Reads vouchers one-by-one from disk without holding the entire array in memory.
+   */
+  public static async iterateVouchersFromRecordsFile(
+    recordsFilePath: string,
+    onVoucher: (voucher: CanonicalVoucher, index: number) => void | Promise<void>,
+    onProgress?: (processed: number, bytesRead: number, totalBytes: number) => void
+  ): Promise<{ totalVouchers: number }> {
+    if (!fs.existsSync(recordsFilePath)) {
+      throw new Error(`Records file not found at: ${recordsFilePath}`);
+    }
+
+    const stats = fs.statSync(recordsFilePath);
+    const totalBytes = stats.size;
+    let bytesRead = 0;
+    let totalVouchers = 0;
+
+    let state: 'SCANNING_FOR_VOUCHERS' | 'IN_VOUCHERS_ARRAY' | 'FINISHED' = 'SCANNING_FOR_VOUCHERS';
+    let objectDepth = 0;
+    let currentObjectChunks: string[] = [];
+    let inString = false;
+    let isEscaped = false;
+
+    let scanBuffer = '';
+    const MAX_SCAN_BUFFER = 64 * 1024;
+
+    const readStream = fs.createReadStream(recordsFilePath, {
+      encoding: 'utf-8',
+      highWaterMark: this.CHUNK_SIZE
+    });
+
+    let lastProgressReportTime = Date.now();
+
+    let processingChain: Promise<void> = Promise.resolve();
+
+    await new Promise<void>((resolve, reject) => {
+      readStream.on('data', (chunk: string | Buffer) => {
+        readStream.pause();
+        processingChain = processingChain.then(async () => {
+          try {
+            const text = typeof chunk === 'string' ? chunk : chunk.toString('utf-8');
+            bytesRead += Buffer.byteLength(text, 'utf-8');
+
+            for (let i = 0; i < text.length; i++) {
+              const char = text[i];
+
+              if (state === 'SCANNING_FOR_VOUCHERS') {
+                if (scanBuffer.length < MAX_SCAN_BUFFER) {
+                  scanBuffer += char;
+                }
+                if (char === '[') {
+                  if (scanBuffer.includes('"vouchers"') || scanBuffer.includes('vouchers') || scanBuffer.trim().startsWith('[')) {
+                    state = 'IN_VOUCHERS_ARRAY';
+                  }
+                }
+                continue;
+              }
+
+              if (state === 'IN_VOUCHERS_ARRAY') {
+                if (!inString) {
+                  if (char === '"') {
+                    inString = true;
+                    if (objectDepth > 0) currentObjectChunks.push(char);
+                  } else if (char === '{') {
+                    objectDepth++;
+                    currentObjectChunks.push(char);
+                  } else if (char === '}') {
+                    objectDepth--;
+                    currentObjectChunks.push(char);
+                    if (objectDepth === 0) {
+                      const objStr = currentObjectChunks.join('');
+                      currentObjectChunks = [];
+                      try {
+                        const vch = JSON.parse(objStr);
+                        totalVouchers++;
+                        const res = onVoucher(vch, totalVouchers - 1);
+                        if (res && typeof (res as any).then === 'function') {
+                          await res;
+                        }
+                      } catch (e) {}
+                    }
+                  } else if (char === ']' && objectDepth === 0) {
+                    state = 'FINISHED';
+                    break;
+                  } else if (objectDepth > 0) {
+                    currentObjectChunks.push(char);
+                  }
+                } else {
+                  currentObjectChunks.push(char);
+                  if (isEscaped) {
+                    isEscaped = false;
+                  } else if (char === '\\') {
+                    isEscaped = true;
+                  } else if (char === '"') {
+                    inString = false;
+                  }
+                }
+
+                const now = Date.now();
+                if (now - lastProgressReportTime > 250) {
+                  lastProgressReportTime = now;
+                  if (onProgress) {
+                    onProgress(totalVouchers, bytesRead, totalBytes);
+                  }
+                }
+              }
+            }
+          } catch (err) {
+            readStream.destroy();
+            reject(err);
+          } finally {
+            readStream.resume();
+          }
+        });
+      });
+
+      readStream.on('end', () => {
+        processingChain
+          .then(() => resolve())
+          .catch((err) => {
+            readStream.destroy();
+            reject(err);
+          });
+      });
+
+      readStream.on('error', (err) => {
+        reject(err);
+      });
+    });
+
+    if (onProgress) {
+      onProgress(totalVouchers, totalBytes, totalBytes);
+    }
+
+    return { totalVouchers };
+  }
+
+  /**
+   * Synchronous incremental streaming reader for records.json.
+   * Reads vouchers one-by-one from disk using a fixed 64KB buffer without loading the entire array into RAM.
+   */
+  public static iterateVouchersFromRecordsFileSync(
+    recordsFilePath: string,
+    onVoucher: (voucher: CanonicalVoucher, index: number) => void,
+    onProgress?: (processed: number, bytesRead: number, totalBytes: number) => void
+  ): { totalVouchers: number } {
+    if (!fs.existsSync(recordsFilePath)) {
+      throw new Error(`Records file not found at: ${recordsFilePath}`);
+    }
+
+    const stats = fs.statSync(recordsFilePath);
+    const totalBytes = stats.size;
+    let bytesRead = 0;
+    let totalVouchers = 0;
+
+    let state: 'SCANNING_FOR_VOUCHERS' | 'IN_VOUCHERS_ARRAY' | 'FINISHED' = 'SCANNING_FOR_VOUCHERS';
+    let objectDepth = 0;
+    let currentObjectChunks: string[] = [];
+    let inString = false;
+    let isEscaped = false;
+
+    let scanBuffer = '';
+    const MAX_SCAN_BUFFER = 64 * 1024;
+
+    const fd = fs.openSync(recordsFilePath, 'r');
+    const buffer = Buffer.alloc(this.CHUNK_SIZE);
+    let bytesReadInChunk = 0;
+
+    let lastProgressReportTime = Date.now();
+
+    try {
+      while ((bytesReadInChunk = fs.readSync(fd, buffer, 0, this.CHUNK_SIZE, null)) > 0) {
+        bytesRead += bytesReadInChunk;
+        const text = buffer.toString('utf-8', 0, bytesReadInChunk);
+
+        for (let i = 0; i < text.length; i++) {
+          const char = text[i];
+
+          if (state === 'SCANNING_FOR_VOUCHERS') {
+            if (scanBuffer.length < MAX_SCAN_BUFFER) {
+              scanBuffer += char;
+            }
+            if (char === '[') {
+              if (scanBuffer.includes('"vouchers"') || scanBuffer.includes('vouchers') || scanBuffer.trim().startsWith('[')) {
+                state = 'IN_VOUCHERS_ARRAY';
+              }
+            }
+            continue;
+          }
+
+          if (state === 'IN_VOUCHERS_ARRAY') {
+            if (!inString) {
+              if (char === '"') {
+                inString = true;
+                if (objectDepth > 0) currentObjectChunks.push(char);
+              } else if (char === '{') {
+                objectDepth++;
+                currentObjectChunks.push(char);
+              } else if (char === '}') {
+                objectDepth--;
+                currentObjectChunks.push(char);
+                if (objectDepth === 0) {
+                  const objStr = currentObjectChunks.join('');
+                  currentObjectChunks = [];
+                  try {
+                    const vch = JSON.parse(objStr);
+                    totalVouchers++;
+                    onVoucher(vch, totalVouchers - 1);
+                  } catch (e) {}
+                }
+              } else if (char === ']' && objectDepth === 0) {
+                state = 'FINISHED';
+                break;
+              } else if (objectDepth > 0) {
+                currentObjectChunks.push(char);
+              }
+            } else {
+              currentObjectChunks.push(char);
+              if (isEscaped) {
+                isEscaped = false;
+              } else if (char === '\\') {
+                isEscaped = true;
+              } else if (char === '"') {
+                inString = false;
+              }
+            }
+
+            const now = Date.now();
+            if (now - lastProgressReportTime > 250) {
+              lastProgressReportTime = now;
+              if (onProgress) {
+                onProgress(totalVouchers, bytesRead, totalBytes);
+              }
+            }
+          }
+        }
+
+        if (state === 'FINISHED') {
+          break;
+        }
+      }
+    } finally {
+      fs.closeSync(fd);
+    }
+
+    if (onProgress) {
+      onProgress(totalVouchers, totalBytes, totalBytes);
+    }
+
+    return { totalVouchers };
+  }
+}

@@ -94,6 +94,26 @@ export interface DataQualityReport {
   recommendations: string[];
 }
 
+export interface DetectedFinancialYear {
+  from: string | null;
+  to: string | null;
+  isDetected: boolean;
+  status: 'DETECTED' | 'REVIEW_REQUIRED';
+  explanation?: string;
+  detectionSource: string;
+  sourceType?: ImportFileFormat;
+  sourcePath?: string;
+  sourceField?: string;
+  sourceValue?: string;
+  inferredSuggestion?: {
+    from: string;
+    to: string;
+    label: string;
+    minDate: string;
+    maxDate: string;
+  };
+}
+
 export interface ImportedDatasetSummary {
   id: string;
   name: string;
@@ -105,7 +125,15 @@ export interface ImportedDatasetSummary {
   financialYearFrom: string | null;
   financialYearTo: string | null;
   isFinancialYearDetected: boolean;
+  financialYearStatus?: 'DETECTED' | 'REVIEW_REQUIRED';
+  financialYearExplanation?: string;
   financialYearDetectionSource?: string;
+  financialYearSourceEvidence?: {
+    sourceType?: ImportFileFormat;
+    sourcePath?: string;
+    sourceField?: string;
+    sourceValue?: string;
+  };
   importedAt: string;
   totalRecords: number;
   masterCounts: MasterCounts;
@@ -121,6 +149,8 @@ export interface ImportedDatasetSummary {
   };
   isActive?: boolean;
   isDemoData?: boolean;
+  isStreamingDataset?: boolean;
+  storageMode?: 'STREAMING_JSONL' | 'IN_MEMORY' | 'SINGLE_JSON';
 }
 
 export interface RawParsedPreview {
@@ -128,15 +158,29 @@ export interface RawParsedPreview {
   fileName: string;
   fileSize: number;
   detectedCompany: string | null;
-  detectedFinancialYear: {
-    from: string | null;
-    to: string | null;
-    isDetected: boolean;
-    detectionSource: string;
-  };
+  detectedFinancialYear: DetectedFinancialYear;
   sheets?: string[];
   selectedSheet?: string;
   rawSampleData: Record<string, any[]>;
+  sampleRecords?: any[];
+  counts?: {
+    vouchers: number;
+    ledgers: number;
+    stockItems: number;
+    totalDebit?: number;
+    totalCredit?: number;
+  };
+  auditSummary?: {
+    totalVouchers: number;
+    totalDebit: number;
+    totalCredit: number;
+    difference: number;
+    isBalanced: boolean;
+    dateRange?: {
+      from: string | null;
+      to: string | null;
+    };
+  };
   detectedEntities: {
     name: string;
     count: number;
@@ -172,6 +216,10 @@ export interface CanonicalVoucherLine {
   isDebit: boolean | null;
   isDeemedPositive?: boolean | null;
   rawAmount?: any;
+  sourceAmount?: any;
+  normalizedAmount?: number | null;
+  direction?: 'Debit' | 'Credit' | 'UNKNOWN' | null;
+  ruleApplied?: string;
   reviewRequired?: boolean;
   reviewReason?: string;
   traceability?: SourceTraceability;
@@ -229,4 +277,7 @@ export interface CanonicalDatasetRecord {
   exceptions: CanonicalAuditException[];
   mappings: FieldMappingItem[];
   rawSourceSample?: any;
+  isStreamingDataset?: boolean;
+  storageMode?: 'STREAMING_JSONL' | 'IN_MEMORY' | 'SINGLE_JSON';
+  sampleVouchers?: CanonicalVoucher[];
 }
