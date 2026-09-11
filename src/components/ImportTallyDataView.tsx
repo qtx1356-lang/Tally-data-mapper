@@ -24,14 +24,17 @@ import {
   Building2,
   Calendar,
   Zap,
-  FolderOpen
+  FolderOpen,
+  MapPin,
+  ExternalLink
 } from 'lucide-react';
 import {
   ImportFileFormat,
   FieldMappingItem,
   ImportedDatasetSummary,
   DataQualityReport,
-  RawParsedPreview
+  RawParsedPreview,
+  SourceTraceability
 } from '../types/offlineDataImport';
 
 interface ImportTallyDataViewProps {
@@ -45,7 +48,7 @@ export const ImportTallyDataView: React.FC<ImportTallyDataViewProps> = ({
   onNavigateToAudit,
   onNavigateToAnalytics
 }) => {
-  // Wizard Steps: 1 = Upload, 2 = Structure Preview, 3 = Mapping, 4 = Quality Check, 5 = Finalized
+  // Wizard Steps: 1 = Upload, 2 = Structure Preview & FY Confirmation, 3 = Mapping, 4 = Quality Check, 5 = Finalized
   const [currentStep, setCurrentStep] = useState<number>(1);
   const [selectedFormat, setSelectedFormat] = useState<ImportFileFormat>('XML');
   const [file, setFile] = useState<File | null>(null);
@@ -61,6 +64,14 @@ export const ImportTallyDataView: React.FC<ImportTallyDataViewProps> = ({
   const [qualityReport, setQualityReport] = useState<DataQualityReport | null>(null);
   const [activeDataset, setActiveDataset] = useState<ImportedDatasetSummary | null>(null);
   const [datasetsList, setDatasetsList] = useState<ImportedDatasetSummary[]>([]);
+
+  // User Overrides for Target Company & Financial Year (never fabricate!)
+  const [overrideCompany, setOverrideCompany] = useState<string>('');
+  const [overrideFyFrom, setOverrideFyFrom] = useState<string>('2024-04-01');
+  const [overrideFyTo, setOverrideFyTo] = useState<string>('2025-03-31');
+
+  // Source Traceability Inspector Modal
+  const [traceabilityModalData, setTraceabilityModalData] = useState<SourceTraceability | null>(null);
 
   // Deletion Confirmation Modal
   const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
@@ -204,6 +215,19 @@ export const ImportTallyDataView: React.FC<ImportTallyDataViewProps> = ({
       setRawRecords(data.rawRecords);
       setMappings(data.mappings || []);
       setQualityReport(data.qualityReport || null);
+
+      // Pre-fill company name and FY if detected
+      if (data.preview?.detectedCompany) {
+        setOverrideCompany(data.preview.detectedCompany);
+      } else {
+        setOverrideCompany(file ? file.name.replace(/\.[^/.]+$/, '') : 'Imported Company');
+      }
+
+      if (data.preview?.detectedFinancialYear?.isDetected) {
+        setOverrideFyFrom(data.preview.detectedFinancialYear.from || '2024-04-01');
+        setOverrideFyTo(data.preview.detectedFinancialYear.to || '2025-03-31');
+      }
+
       setCurrentStep(2);
     } catch (err: any) {
       setIsLoading(false);
@@ -242,13 +266,17 @@ export const ImportTallyDataView: React.FC<ImportTallyDataViewProps> = ({
     }
   };
 
-  // Auto-Map All Mappings
-  const handleAutoMapAll = () => {
-    const updated = mappings.map(m => ({
-      ...m,
-      status: 'MAPPED' as const,
-      confidence: (m.confidence === 'LOW' ? 'MEDIUM' : m.confidence) as any
-    }));
+  // Apply Auto-Map strictly to HIGH confidence items (Never auto-upgrade LOW to MEDIUM)
+  const handleAutoMapHighConfidence = () => {
+    const updated = mappings.map(m => {
+      if (m.confidence === 'HIGH') {
+        return {
+          ...m,
+          status: 'MAPPED' as const
+        };
+      }
+      return m;
+    });
     setMappings(updated);
   };
 
@@ -268,12 +296,12 @@ export const ImportTallyDataView: React.FC<ImportTallyDataViewProps> = ({
     );
   };
 
-  // Commit Dataset
+  // Commit Dataset with full overrides & persistent storage
   const handleCommitDataset = async () => {
     if (!rawRecords || !mappings) return;
 
     setIsLoading(true);
-    setLoadingMessage('Normalizing and committing dataset to canonical store...');
+    setLoadingMessage('Normalizing and committing dataset to persistent desktop store...');
     setErrorMessage(null);
 
     try {
@@ -285,7 +313,13 @@ export const ImportTallyDataView: React.FC<ImportTallyDataViewProps> = ({
           fileType: selectedFormat,
           fileSize: file?.size || parsedPreview?.fileSize || 50000,
           rawRecords,
-          mappings
+          mappings,
+          overrides: {
+            companyName: overrideCompany || undefined,
+            financialYearFrom: overrideFyFrom || undefined,
+            financialYearTo: overrideFyTo || undefined,
+            isDemoData: false
+          }
         })
       });
 
@@ -359,7 +393,7 @@ export const ImportTallyDataView: React.FC<ImportTallyDataViewProps> = ({
             </span>
           </div>
           <p className="text-xs text-slate-400 mt-1">
-            Import TallyPrime data from XML, JSON, or Excel files for offline analysis, mapping, audit, and forensic intelligence.
+            Import TallyPrime data from XML, JSON, or Excel files for offline audit, forensic intelligence, and financial analytics.
           </p>
         </div>
 
@@ -387,7 +421,7 @@ export const ImportTallyDataView: React.FC<ImportTallyDataViewProps> = ({
             Standalone Offline Capability — TallyPrime is NOT required to be running
           </div>
           <p className="text-slate-300 leading-relaxed">
-            You can load historical audit dumps, exported daybooks, or company master backups. EXFIN automatically parses, validates, and normalizes records into the canonical audit model.
+            Historical audit exports, Excel daybooks, and master backups are parsed into persistent local storage with complete source traceability. Zero accounting numbers or dates are fabricated.
           </p>
         </div>
       </div>
@@ -396,7 +430,7 @@ export const ImportTallyDataView: React.FC<ImportTallyDataViewProps> = ({
       <div className="grid grid-cols-5 gap-2 text-xs">
         {[
           { step: 1, label: '1. Select File' },
-          { step: 2, label: '2. Structure Preview' },
+          { step: 2, label: '2. Structure & FY' },
           { step: 3, label: '3. Auto-Mapping' },
           { step: 4, label: '4. Quality Audit' },
           { step: 5, label: '5. Ready & Active' }
@@ -535,14 +569,14 @@ export const ImportTallyDataView: React.FC<ImportTallyDataViewProps> = ({
                 disabled={isLoading}
                 className="rounded border border-slate-700 bg-slate-800/80 hover:bg-slate-700 px-3 py-1.5 text-xs font-medium text-sky-300 transition-colors"
               >
-                Load Sample XML
+                Load Sample XML [DEMO]
               </button>
               <button
                 onClick={() => handleLoadSample('JSON')}
                 disabled={isLoading}
                 className="rounded border border-slate-700 bg-slate-800/80 hover:bg-slate-700 px-3 py-1.5 text-xs font-medium text-sky-300 transition-colors"
               >
-                Load Sample JSON
+                Load Sample JSON [DEMO]
               </button>
             </div>
 
@@ -558,7 +592,7 @@ export const ImportTallyDataView: React.FC<ImportTallyDataViewProps> = ({
         </div>
       )}
 
-      {/* STEP 2: STRUCTURE PREVIEW */}
+      {/* STEP 2: STRUCTURE PREVIEW & FY SELECTION */}
       {currentStep === 2 && parsedPreview && (
         <div className="space-y-6">
           <div className="rounded-xl border border-slate-800 bg-[#1E293B] p-5 space-y-4">
@@ -569,16 +603,60 @@ export const ImportTallyDataView: React.FC<ImportTallyDataViewProps> = ({
                   <span>Detected Dataset Metadata</span>
                 </h3>
                 <p className="text-xs text-slate-400 mt-0.5">
-                  Source File: <span className="text-slate-200 font-mono">{parsedPreview.fileName}</span> (
-                  {parsedPreview.fileType})
+                  Source File: <span className="text-slate-200 font-mono">{parsedPreview.fileName}</span> ({parsedPreview.fileType})
                 </p>
               </div>
 
               <div className="flex items-center space-x-2">
-                <span className="text-xs text-slate-400">Target Company:</span>
-                <span className="font-bold text-sky-300 text-xs bg-slate-900 px-2.5 py-1 rounded border border-slate-700">
-                  {parsedPreview.detectedCompany || 'Imported Tally Entity'}
-                </span>
+                <span className="text-xs text-slate-400">Company Name:</span>
+                <input
+                  type="text"
+                  value={overrideCompany}
+                  onChange={e => setOverrideCompany(e.target.value)}
+                  className="font-bold text-sky-300 text-xs bg-slate-900 px-2.5 py-1 rounded border border-slate-700 focus:border-sky-500 outline-none min-w-[200px]"
+                  placeholder="Enter Company Name"
+                />
+              </div>
+            </div>
+
+            {/* Financial Year Detection Banner */}
+            <div className="rounded-lg bg-slate-900/90 p-4 border border-slate-800 space-y-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center space-x-2">
+                  <Calendar className="h-4 w-4 text-sky-400" />
+                  <span className="text-xs font-bold text-slate-200">Financial Year Configuration:</span>
+                  <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                    parsedPreview.detectedFinancialYear.isDetected
+                      ? 'bg-emerald-950 text-emerald-300 border border-emerald-800'
+                      : 'bg-amber-950 text-amber-300 border border-amber-800'
+                  }`}>
+                    {parsedPreview.detectedFinancialYear.isDetected ? 'Auto-Detected' : 'Requires Confirmation'}
+                  </span>
+                  <span className="text-[11px] text-slate-400">
+                    Source: {parsedPreview.detectedFinancialYear.detectionSource}
+                  </span>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                <div>
+                  <label className="text-[11px] text-slate-400 block mb-1">Financial Year Start Date (YYYY-MM-DD):</label>
+                  <input
+                    type="date"
+                    value={overrideFyFrom}
+                    onChange={e => setOverrideFyFrom(e.target.value)}
+                    className="w-full bg-slate-950 border border-slate-700 rounded px-3 py-1.5 text-xs text-slate-100 font-mono focus:border-sky-500 outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="text-[11px] text-slate-400 block mb-1">Financial Year End Date (YYYY-MM-DD):</label>
+                  <input
+                    type="date"
+                    value={overrideFyTo}
+                    onChange={e => setOverrideFyTo(e.target.value)}
+                    className="w-full bg-slate-950 border border-slate-700 rounded px-3 py-1.5 text-xs text-slate-100 font-mono focus:border-sky-500 outline-none"
+                  />
+                </div>
               </div>
             </div>
 
@@ -593,36 +671,17 @@ export const ImportTallyDataView: React.FC<ImportTallyDataViewProps> = ({
                     {ent.count.toLocaleString()}
                   </span>
                   <span className="text-[10px] text-slate-500 block truncate">
-                    {ent.fields.length} detected attributes
+                    Classified: {ent.classifiedAs || 'Master Record'}
                   </span>
                 </div>
               ))}
             </div>
-
-            {/* Excel Sheet Selector if Excel */}
-            {parsedPreview.sheets && parsedPreview.sheets.length > 1 && (
-              <div className="pt-2">
-                <label className="block text-xs font-semibold text-slate-300 mb-1">
-                  Detected Sheets in Workbook:
-                </label>
-                <div className="flex flex-wrap gap-2">
-                  {parsedPreview.sheets.map(sheet => (
-                    <span
-                      key={sheet}
-                      className="rounded bg-slate-900 border border-slate-700 px-3 py-1 text-xs text-slate-200 font-mono"
-                    >
-                      {sheet}
-                    </span>
-                  ))}
-                </div>
-              </div>
-            )}
           </div>
 
           {/* Sample Records Table Preview */}
           <div className="rounded-xl border border-slate-800 bg-[#1E293B] p-5 space-y-3">
             <h4 className="text-xs font-bold text-slate-200 uppercase tracking-wider">
-              Sample Voucher / Record Preview
+              Sample Voucher / Record Preview (Exact Source Data)
             </h4>
 
             <div className="overflow-x-auto rounded-lg border border-slate-800 bg-slate-950">
@@ -633,22 +692,38 @@ export const ImportTallyDataView: React.FC<ImportTallyDataViewProps> = ({
                     <th className="p-2.5">Type</th>
                     <th className="p-2.5">Date</th>
                     <th className="p-2.5">Party / Ledger</th>
-                    <th className="p-2.5 text-right">Amount (₹)</th>
-                    <th className="p-2.5">Narration</th>
+                    <th className="p-2.5 text-right">Debit (₹)</th>
+                    <th className="p-2.5 text-right">Credit (₹)</th>
+                    <th className="p-2.5">Traceability</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-900">
                   {(rawRecords?.vouchers || []).slice(0, 5).map((v: any, idx: number) => (
                     <tr key={idx} className="hover:bg-slate-900/50">
-                      <td className="p-2.5 text-sky-400 font-semibold">{v.voucherNumber || `V-${idx + 1}`}</td>
-                      <td className="p-2.5 text-slate-300">{v.voucherType || 'Journal'}</td>
-                      <td className="p-2.5 text-slate-400">{v.date}</td>
-                      <td className="p-2.5 text-slate-200">{v.partyLedger || 'General'}</td>
-                      <td className="p-2.5 text-right font-bold text-emerald-400">
-                        {v.amount ? v.amount.toLocaleString('en-IN') : '0.00'}
+                      <td className="p-2.5 text-sky-400 font-semibold">
+                        {v.voucherNumber || <span className="text-amber-400">[Missing]</span>}
                       </td>
-                      <td className="p-2.5 text-slate-500 truncate max-w-[200px]">
-                        {v.narration || '-'}
+                      <td className="p-2.5 text-slate-300">{v.voucherType || '-'}</td>
+                      <td className="p-2.5 text-slate-400">
+                        {v.date || <span className="text-amber-400">[Missing Date]</span>}
+                      </td>
+                      <td className="p-2.5 text-slate-200">
+                        {v.partyLedger || <span className="text-amber-400">[Review Required]</span>}
+                      </td>
+                      <td className="p-2.5 text-right font-bold text-emerald-400">
+                        {v.totalDebit > 0 ? v.totalDebit.toLocaleString('en-IN') : '-'}
+                      </td>
+                      <td className="p-2.5 text-right font-bold text-sky-400">
+                        {v.totalCredit > 0 ? v.totalCredit.toLocaleString('en-IN') : '-'}
+                      </td>
+                      <td className="p-2.5">
+                        <button
+                          onClick={() => setTraceabilityModalData(v.traceability)}
+                          className="flex items-center space-x-1 text-[11px] text-sky-400 hover:text-sky-300 underline"
+                        >
+                          <MapPin className="h-3 w-3" />
+                          <span>Inspect Source</span>
+                        </button>
                       </td>
                     </tr>
                   ))}
@@ -669,7 +744,7 @@ export const ImportTallyDataView: React.FC<ImportTallyDataViewProps> = ({
               onClick={() => setCurrentStep(3)}
               className="flex items-center space-x-2 rounded-xl bg-sky-600 hover:bg-sky-500 px-5 py-2.5 text-xs font-bold text-white shadow-lg transition-all"
             >
-              <span>Review Canonical Auto-Mappings</span>
+              <span>Review Canonical Field Mappings</span>
               <ArrowRight className="h-4 w-4" />
             </button>
           </div>
@@ -687,17 +762,17 @@ export const ImportTallyDataView: React.FC<ImportTallyDataViewProps> = ({
                   <span>Canonical Model Mapping Engine</span>
                 </h3>
                 <p className="text-xs text-slate-400 mt-0.5">
-                  Maps source fields to the EXFIN canonical schema. High-confidence fields are automatically bound.
+                  Strict confidence policy: HIGH confidence mappings are allowed; MEDIUM & LOW require confirmation.
                 </p>
               </div>
 
               <div className="flex items-center space-x-2">
                 <button
-                  onClick={handleAutoMapAll}
+                  onClick={handleAutoMapHighConfidence}
                   className="flex items-center space-x-1.5 rounded bg-sky-600/20 hover:bg-sky-600/30 border border-sky-500/30 px-3 py-1.5 text-xs font-semibold text-sky-300 transition-colors"
                 >
                   <Sparkles className="h-3.5 w-3.5" />
-                  <span>Auto-Map All</span>
+                  <span>Auto-Map High Confidence</span>
                 </button>
               </div>
             </div>
@@ -711,8 +786,8 @@ export const ImportTallyDataView: React.FC<ImportTallyDataViewProps> = ({
                     <th className="p-3">Detected Entity</th>
                     <th className="p-3">Canonical EXFIN Field</th>
                     <th className="p-3">Confidence</th>
-                    <th className="p-3">Sample Value</th>
                     <th className="p-3">Status</th>
+                    <th className="p-3">Traceability</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-900 font-mono">
@@ -752,9 +827,6 @@ export const ImportTallyDataView: React.FC<ImportTallyDataViewProps> = ({
                           {mapItem.confidence} ({mapItem.confidenceScore}%)
                         </span>
                       </td>
-                      <td className="p-3 text-slate-400 truncate max-w-[150px]">
-                        {String(mapItem.sampleValues?.[0] ?? '-')}
-                      </td>
                       <td className="p-3">
                         <span
                           className={`flex items-center space-x-1 text-[11px] font-sans ${
@@ -772,6 +844,17 @@ export const ImportTallyDataView: React.FC<ImportTallyDataViewProps> = ({
                           )}
                           <span>{mapItem.status}</span>
                         </span>
+                      </td>
+                      <td className="p-3">
+                        {mapItem.traceability && (
+                          <button
+                            onClick={() => setTraceabilityModalData(mapItem.traceability!)}
+                            className="flex items-center space-x-1 text-[10px] text-slate-400 hover:text-sky-300"
+                          >
+                            <MapPin className="h-3 w-3" />
+                            <span>Source Info</span>
+                          </button>
+                        )}
                       </td>
                     </tr>
                   ))}
@@ -810,7 +893,7 @@ export const ImportTallyDataView: React.FC<ImportTallyDataViewProps> = ({
                   <span>Data Quality Assessment & Audit Readiness</span>
                 </h3>
                 <p className="text-xs text-slate-400 mt-0.5">
-                  Automated structural integrity, duplicate detection, and accounting balance checks
+                  Structural integrity, duplicate detection, and accounting balance checks
                 </p>
               </div>
 
@@ -846,7 +929,7 @@ export const ImportTallyDataView: React.FC<ImportTallyDataViewProps> = ({
                 </span>
               </div>
               <div className="rounded-lg bg-slate-900/60 p-3 border border-slate-800">
-                <span className="text-slate-400 block mb-1">Missing / Bad Dates</span>
+                <span className="text-slate-400 block mb-1">Missing Dates</span>
                 <span
                   className={`text-base font-bold font-mono ${
                     qualityReport.missingDates > 0 ? 'text-rose-400' : 'text-emerald-400'
@@ -897,7 +980,7 @@ export const ImportTallyDataView: React.FC<ImportTallyDataViewProps> = ({
               className="flex items-center space-x-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 px-6 py-2.5 text-xs font-bold text-white shadow-lg shadow-emerald-950/30 transition-all hover:scale-[1.02]"
             >
               <Check className="h-4 w-4" />
-              <span>{isLoading ? 'Finalizing Normalization...' : 'Commit & Activate Dataset'}</span>
+              <span>{isLoading ? 'Persisting to Local Storage...' : 'Commit & Persist Dataset'}</span>
             </button>
           </div>
         </div>
@@ -913,7 +996,7 @@ export const ImportTallyDataView: React.FC<ImportTallyDataViewProps> = ({
               </div>
               <div>
                 <span className="text-[10px] font-black text-emerald-400 uppercase tracking-widest block">
-                  Active Dataset Live
+                  Active Dataset Live & Persisted
                 </span>
                 <h2 className="text-xl font-black text-slate-100 mt-0.5">{activeDataset.name}</h2>
                 <p className="text-xs text-slate-400 mt-0.5">
@@ -988,10 +1071,10 @@ export const ImportTallyDataView: React.FC<ImportTallyDataViewProps> = ({
           <div>
             <h3 className="text-sm font-bold text-slate-100 flex items-center space-x-2">
               <FolderOpen className="h-4 w-4 text-sky-400" />
-              <span>Imported Datasets & Session History</span>
+              <span>Persisted Offline Datasets & Workspaces</span>
             </h3>
             <p className="text-xs text-slate-400 mt-0.5">
-              Switch between offline datasets or manage persistent company workspaces
+              Previously imported datasets remain safely stored on disk across application restarts.
             </p>
           </div>
 
@@ -1040,6 +1123,11 @@ export const ImportTallyDataView: React.FC<ImportTallyDataViewProps> = ({
                           <span className="h-2 w-2 rounded-full bg-emerald-400 shadow-[0_0_6px_rgba(52,211,153,0.8)]" />
                         )}
                         <span>{ds.name}</span>
+                        {ds.isDemoData && (
+                          <span className="rounded bg-amber-500/20 text-amber-300 border border-amber-500/30 text-[9px] px-1.5 py-0.2 font-sans font-bold">
+                            DEMO
+                          </span>
+                        )}
                       </td>
                       <td className="p-3 text-slate-300">{ds.companyName}</td>
                       <td className="p-3">
@@ -1097,6 +1185,78 @@ export const ImportTallyDataView: React.FC<ImportTallyDataViewProps> = ({
         </div>
       </div>
 
+      {/* Source Traceability Inspector Modal */}
+      {traceabilityModalData && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
+          <div className="max-w-md w-full rounded-2xl border border-slate-800 bg-[#1E293B] p-6 space-y-4 shadow-2xl">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <div className="flex items-center space-x-2 text-sky-400">
+                <MapPin className="h-5 w-5" />
+                <h3 className="text-sm font-bold text-slate-100">Source Traceability Evidence</h3>
+              </div>
+              <button
+                onClick={() => setTraceabilityModalData(null)}
+                className="text-slate-400 hover:text-slate-200 text-xs"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="space-y-2 text-xs font-mono">
+              <div className="bg-slate-950 p-2.5 rounded border border-slate-800 space-y-1.5">
+                <div>
+                  <span className="text-slate-500 block">Source Format:</span>
+                  <span className="text-sky-300">{traceabilityModalData.sourceFileType}</span>
+                </div>
+                <div>
+                  <span className="text-slate-500 block">Source File:</span>
+                  <span className="text-slate-200">{traceabilityModalData.sourceFile}</span>
+                </div>
+                {traceabilityModalData.sourcePath && (
+                  <div>
+                    <span className="text-slate-500 block">XML Hierarchy Path:</span>
+                    <span className="text-emerald-400">{traceabilityModalData.sourcePath}</span>
+                  </div>
+                )}
+                {traceabilityModalData.jsonPath && (
+                  <div>
+                    <span className="text-slate-500 block">JSON Path:</span>
+                    <span className="text-emerald-400">{traceabilityModalData.jsonPath}</span>
+                  </div>
+                )}
+                {traceabilityModalData.worksheet && (
+                  <div>
+                    <span className="text-slate-500 block">Worksheet:</span>
+                    <span className="text-amber-300">{traceabilityModalData.worksheet}</span>
+                  </div>
+                )}
+                {traceabilityModalData.rowNumber && (
+                  <div>
+                    <span className="text-slate-500 block">Excel Row Number:</span>
+                    <span className="text-slate-200">Row {traceabilityModalData.rowNumber}</span>
+                  </div>
+                )}
+                {traceabilityModalData.columnName && (
+                  <div>
+                    <span className="text-slate-500 block">Column Header:</span>
+                    <span className="text-slate-200">{traceabilityModalData.columnName}</span>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className="flex justify-end pt-2">
+              <button
+                onClick={() => setTraceabilityModalData(null)}
+                className="rounded-lg bg-slate-800 hover:bg-slate-700 px-4 py-2 text-xs font-semibold text-slate-200"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Delete Confirmation Modal */}
       {deleteTargetId && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
@@ -1106,7 +1266,7 @@ export const ImportTallyDataView: React.FC<ImportTallyDataViewProps> = ({
               <h3 className="text-base font-bold text-slate-100">Delete Imported Dataset?</h3>
             </div>
             <p className="text-xs text-slate-300 leading-relaxed">
-              Are you sure you want to remove this imported dataset? All normalized canonical records, field mappings, and associated offline audit findings for this session will be removed.
+              Are you sure you want to remove this imported dataset from persistent local storage?
             </p>
             <div className="flex items-center justify-end space-x-3 pt-3">
               <button

@@ -130,7 +130,7 @@ offlineDataImportRouter.post('/parse', (req: Request, res: Response) => {
 // 8. Commit and save dataset into canonical store
 offlineDataImportRouter.post('/commit', (req: Request, res: Response) => {
   try {
-    const { fileName, fileType, fileSize, rawRecords, mappings } = req.body;
+    const { fileName, fileType, fileSize, rawRecords, mappings, overrides } = req.body;
 
     if (!rawRecords || !mappings) {
       return res.status(400).json({ success: false, error: 'rawRecords and mappings are required' });
@@ -141,7 +141,8 @@ offlineDataImportRouter.post('/commit', (req: Request, res: Response) => {
       fileType || 'XML',
       fileSize || 50000,
       rawRecords,
-      mappings
+      mappings,
+      overrides
     );
 
     res.json({
@@ -158,26 +159,62 @@ offlineDataImportRouter.post('/commit', (req: Request, res: Response) => {
 offlineDataImportRouter.post('/sample', (req: Request, res: Response) => {
   try {
     const { sampleType = 'XML' } = req.body;
-    let fileName = 'Apex_Global_Trading_FY2024_25.xml';
+    let fileName = 'DEMO_Apex_Global_Trading_FY2024_25.xml';
     let fileType: any = 'XML';
     let content = '';
 
     if (sampleType === 'JSON') {
-      fileName = 'Quantum_Retailers_FY2024_25.json';
+      fileName = 'DEMO_Quantum_Retailers_FY2024_25.json';
       fileType = 'JSON';
       content = offlineDataImportEngine.generateSampleJson();
       const parsed = offlineDataImportEngine.parseJsonData(content, fileName);
       const mappings = offlineDataImportEngine.generateAutoMappings(parsed.rawRecords);
-      const saved = offlineDataImportEngine.commitDataset(fileName, fileType, content.length, parsed.rawRecords, mappings);
+      const saved = offlineDataImportEngine.commitDataset(
+        fileName, 
+        fileType, 
+        content.length, 
+        parsed.rawRecords, 
+        mappings, 
+        {
+          companyName: '[DEMO DATA] Quantum Retailers Limited',
+          financialYearFrom: '2024-04-01',
+          financialYearTo: '2025-03-31',
+          isDemoData: true
+        }
+      );
       return res.json({ success: true, dataset: saved.metadata, datasetRecord: saved });
     } else {
       content = offlineDataImportEngine.generateSampleXml();
       const parsed = offlineDataImportEngine.parseXmlData(content, fileName);
       const mappings = offlineDataImportEngine.generateAutoMappings(parsed.rawRecords);
-      const saved = offlineDataImportEngine.commitDataset(fileName, fileType, content.length, parsed.rawRecords, mappings);
+      const saved = offlineDataImportEngine.commitDataset(
+        fileName, 
+        fileType, 
+        content.length, 
+        parsed.rawRecords, 
+        mappings, 
+        {
+          companyName: '[DEMO DATA] Apex Global Trading Pvt Ltd',
+          financialYearFrom: '2024-04-01',
+          financialYearTo: '2025-03-31',
+          isDemoData: true
+        }
+      );
       return res.json({ success: true, dataset: saved.metadata, datasetRecord: saved });
     }
   } catch (err: any) {
     res.status(500).json({ success: false, error: err.message });
   }
 });
+
+// 10. Run Offline Data Import Verification Tests
+offlineDataImportRouter.get('/run-tests', async (req: Request, res: Response) => {
+  try {
+    const { runOfflineDataImportTests } = await import('./tests/offlineDataImport.test');
+    const testResults = await runOfflineDataImportTests();
+    res.json({ success: true, ...testResults });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+

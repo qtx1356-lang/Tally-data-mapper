@@ -28,6 +28,18 @@ export type CanonicalEntityName =
   | 'JournalTransaction'
   | 'ExpenseTransaction';
 
+export interface SourceTraceability {
+  sourceFileType: ImportFileFormat;
+  sourceFile: string;
+  sourcePath?: string;      // XML Path e.g. TALLYMESSAGE/VOUCHER[14]
+  jsonPath?: string;        // JSON Path e.g. $.vouchers[2].amount
+  worksheet?: string;       // Excel Worksheet name
+  rowNumber?: number;       // Excel 1-based Row Number
+  columnName?: string;      // Excel Column Name
+  sourceField?: string;     // Source Field Name
+  rawSourceValue?: any;     // Exact raw unparsed value
+}
+
 export interface FieldMappingItem {
   id: string;
   sourceField: string;
@@ -43,6 +55,7 @@ export interface FieldMappingItem {
   isUserOverridden?: boolean;
   notes?: string;
   transformationRule?: string;
+  traceability?: SourceTraceability;
 }
 
 export interface MasterCounts {
@@ -75,6 +88,7 @@ export interface DataQualityReport {
   unbalancedVouchers: number;
   orphanLedgers: number;
   unmappedFieldsCount: number;
+  reviewRequiredFieldsCount: number;
   warnings: string[];
   errors: string[];
   recommendations: string[];
@@ -87,9 +101,11 @@ export interface ImportedDatasetSummary {
   sourceFileName: string;
   sourceFileType: ImportFileFormat;
   sourceFileSize: number;
-  companyName: string;
-  financialYearFrom: string;
-  financialYearTo: string;
+  companyName: string | null;
+  financialYearFrom: string | null;
+  financialYearTo: string | null;
+  isFinancialYearDetected: boolean;
+  financialYearDetectionSource?: string;
   importedAt: string;
   totalRecords: number;
   masterCounts: MasterCounts;
@@ -104,14 +120,20 @@ export interface ImportedDatasetSummary {
     unmapped: number;
   };
   isActive?: boolean;
+  isDemoData?: boolean;
 }
 
 export interface RawParsedPreview {
   fileType: ImportFileFormat;
   fileName: string;
   fileSize: number;
-  detectedCompany?: string;
-  detectedFinancialYear?: { from: string; to: string };
+  detectedCompany: string | null;
+  detectedFinancialYear: {
+    from: string | null;
+    to: string | null;
+    isDetected: boolean;
+    detectionSource: string;
+  };
   sheets?: string[];
   selectedSheet?: string;
   rawSampleData: Record<string, any[]>;
@@ -120,6 +142,7 @@ export interface RawParsedPreview {
     count: number;
     fields: string[];
     sample: any[];
+    classifiedAs?: string;
   }[];
 }
 
@@ -142,6 +165,54 @@ export interface ImportSessionState {
   errorMessage?: string;
 }
 
+export interface CanonicalVoucherLine {
+  id: string;
+  ledgerName: string | null;
+  amount: number | null;
+  isDebit: boolean | null;
+  isDeemedPositive?: boolean | null;
+  rawAmount?: any;
+  reviewRequired?: boolean;
+  reviewReason?: string;
+  traceability?: SourceTraceability;
+}
+
+export interface CanonicalVoucher {
+  id: string;
+  voucherNumber: string | null;
+  voucherType: string | null;
+  date: string | null;
+  partyLedger: string | null;
+  amount: number | null;
+  totalDebit: number;
+  totalCredit: number;
+  difference: number;
+  isBalanced: boolean;
+  narration: string | null;
+  entries: CanonicalVoucherLine[];
+  reviewRequired?: boolean;
+  reviewReasons?: string[];
+  sourceFile: string;
+  datasetId: string;
+  traceability?: SourceTraceability;
+}
+
+export interface CanonicalAuditException {
+  id: string;
+  risk: 'HIGH' | 'MEDIUM' | 'LOW';
+  riskScore: number;
+  date: string | null;
+  voucherNo: string | null;
+  voucherType: string | null;
+  ledger: string | null;
+  party: string | null;
+  amount: number | null;
+  exceptionType: string;
+  reason: string;
+  status: 'Pending' | 'Reviewed' | 'Resolved';
+  traceability?: SourceTraceability;
+}
+
 export interface CanonicalDatasetRecord {
   id: string;
   metadata: ImportedDatasetSummary;
@@ -149,12 +220,13 @@ export interface CanonicalDatasetRecord {
   groups: any[];
   ledgers: any[];
   parties: any[];
-  vouchers: any[];
-  voucherLines: any[];
+  vouchers: CanonicalVoucher[];
+  voucherLines: CanonicalVoucherLine[];
   stockItems: any[];
   costCentres: any[];
   taxRecords: any[];
   bankAccounts: any[];
-  exceptions: any[];
+  exceptions: CanonicalAuditException[];
+  mappings: FieldMappingItem[];
   rawSourceSample?: any;
 }

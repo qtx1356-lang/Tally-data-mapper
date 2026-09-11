@@ -1,0 +1,67 @@
+{
+  "updatedAt": "2026-09-11T09:26:29.287Z",
+  "activeDatasetId": "ds-offline-1789118789269-j6w0a",
+  "datasetCount": 1,
+  "datasets": [
+    {
+      "id": "ds-offline-1789118789269-j6w0a",
+      "name": "[DEMO DATA] [DEMO DATA] Apex Global Trading Pvt Ltd (XML)",
+      "description": "Imported from DEMO_Apex_Global_Trading_FY2024_25.xml with 3 vouchers and 6 masters.",
+      "sourceFileName": "DEMO_Apex_Global_Trading_FY2024_25.xml",
+      "sourceFileType": "XML",
+      "sourceFileSize": 5239,
+      "companyName": "[DEMO DATA] Apex Global Trading Pvt Ltd",
+      "financialYearFrom": "2024-04-01",
+      "financialYearTo": "2025-03-31",
+      "isFinancialYearDetected": true,
+      "financialYearDetectionSource": "XML Company Master (<STARTINGFROM>/<ENDINGAT>)",
+      "importedAt": "2026-09-11T09:26:29.269Z",
+      "totalRecords": 10,
+      "masterCounts": {
+        "ledgers": 6,
+        "groups": 2,
+        "parties": 2,
+        "stockItems": 1,
+        "costCentres": 0,
+        "bankAccounts": 1
+      },
+      "voucherCounts": {
+        "total": 3,
+        "sales": 1,
+        "purchase": 0,
+        "payment": 2,
+        "receipt": 0,
+        "journal": 0,
+        "contra": 0,
+        "other": 0
+      },
+      "dataQualityScore": 88,
+      "dataQualityReport": {
+        "score": 88,
+        "totalRecordsChecked": 9,
+        "passedRecords": 9,
+        "duplicateVouchers": 0,
+        "missingDates": 0,
+        "invalidAmounts": 0,
+        "unbalancedVouchers": 0,
+        "orphanLedgers": 0,
+        "unmappedFieldsCount": 0,
+        "reviewRequiredFieldsCount": 8,
+        "warnings": [
+          "8 fields require mapping confirmation or manual review."
+        ],
+        "errors": [],
+        "recommendations": []
+      },
+      "status": "Ready",
+      "mappingsCount": {
+        "total": 18,
+        "mapped": 10,
+        "reviewRequired": 8,
+        "unmapped": 0
+      },
+      "isActive": true,
+      "isDemoData": true
+    }
+  ]
+}
