@@ -70,6 +70,7 @@ import { AuditSamplingView } from './components/audit/AuditSamplingView';
 import { AuditWorkspaceView } from './components/audit/AuditWorkspaceView';
 import { AIAuditAssistantView } from './components/audit/AIAuditAssistantView';
 import { FinancialAnalyticsView } from './components/audit/FinancialAnalyticsView';
+import { ImportTallyDataView } from './components/ImportTallyDataView';
 import {
   Brain,
   LayoutDashboard,
@@ -83,6 +84,7 @@ import {
   GitMerge,
   Filter,
   FileCode,
+  FileUp,
   Download,
   Activity,
   Settings,
@@ -140,6 +142,7 @@ import {
 type NavigationPage =
   | 'Dashboard'
   // Tally
+  | 'Import Tally Data'
   | 'Tally Connection'
   | 'Company Explorer'
   | 'Smart Tally Discovery'
@@ -261,6 +264,11 @@ export default function App() {
   const [showCompanyModal, setShowCompanyModal] = useState<boolean>(false);
   const [isFetchingCompanies, setIsFetchingCompanies] = useState<boolean>(false);
 
+  // Data Source Selector Mode
+  const [dataSourceMode, setDataSourceMode] = useState<'LIVE_TALLY' | 'OFFLINE_DATASET'>('OFFLINE_DATASET');
+  const [activeOfflineDataset, setActiveOfflineDataset] = useState<any>(null);
+  const [offlineDatasets, setOfflineDatasets] = useState<any[]>([]);
+
   // Settings State
   const [settings, setSettings] = useState<AppSettings>({
     tallyHost: 'localhost',
@@ -322,7 +330,35 @@ export default function App() {
       .catch(() => {});
 
     fetchSolutionFiles();
+    fetchOfflineDatasets();
   }, []);
+
+  const fetchOfflineDatasets = () => {
+    fetch('/api/import/active')
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.success && data.activeDataset) {
+          const meta = data.activeDataset.metadata || data.activeDataset;
+          setActiveOfflineDataset(meta);
+          setSelectedCompany({
+            name: meta.companyName || 'Apex Global Trading',
+            startingFrom: meta.financialYearFrom || '2024-04-01',
+            endingAt: meta.financialYearTo || '2025-03-31',
+            isActive: true
+          });
+        }
+      })
+      .catch(() => {});
+
+    fetch('/api/import/datasets')
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.success && data.datasets) {
+          setOfflineDatasets(data.datasets);
+        }
+      })
+      .catch(() => {});
+  };
 
   const fetchSolutionFiles = () => {
     fetch('/api/solution/files')
@@ -515,6 +551,7 @@ export default function App() {
     {
       section: 'TALLY',
       items: [
+        { label: 'Import Tally Data', icon: FileUp },
         { label: 'Tally Connection', icon: Radio },
         { label: 'Company Explorer', icon: Building2 },
         { label: 'Smart Tally Discovery', icon: Compass },
@@ -604,35 +641,85 @@ export default function App() {
           </div>
         </div>
 
-        <div className="flex items-center space-x-4">
-          {/* Connection Status Pill with Text */}
-          <div className="flex items-center space-x-2 rounded-full border border-slate-800 bg-[#1E293B] px-3 py-1 text-xs">
-            <span
-              className={`h-2 w-2 rounded-full ${
-                connectionStatus === 'Connected'
-                  ? 'bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.8)]'
-                  : connectionStatus === 'Connecting'
-                  ? 'bg-amber-400 animate-pulse shadow-[0_0_8px_rgba(251,191,36,0.8)]'
-                  : 'bg-rose-500 shadow-[0_0_8px_rgba(244,63,94,0.8)]'
+        <div className="flex items-center space-x-3">
+          {/* Data Source Selector Toggle */}
+          <div className="flex items-center rounded-lg bg-slate-900 border border-slate-800 p-0.5 text-[10px]">
+            <button
+              onClick={() => {
+                setDataSourceMode('OFFLINE_DATASET');
+                if (activeOfflineDataset && !selectedCompany) {
+                  setSelectedCompany({
+                    name: activeOfflineDataset.companyName || 'Apex Global Trading',
+                    startingFrom: activeOfflineDataset.financialYearFrom,
+                    endingAt: activeOfflineDataset.financialYearTo,
+                    isActive: true
+                  });
+                }
+              }}
+              className={`px-2.5 py-1 rounded font-semibold transition-all flex items-center space-x-1.5 ${
+                dataSourceMode === 'OFFLINE_DATASET'
+                  ? 'bg-sky-600 text-white shadow'
+                  : 'text-slate-400 hover:text-slate-200'
               }`}
-            />
-            <span className="text-slate-200 font-medium text-[10px]">
-              {connectionStatus === 'Connected'
-                ? 'Connected'
-                : connectionStatus === 'Connecting'
-                ? 'Connecting...'
-                : 'Disconnected'}
-            </span>
+            >
+              <FileUp className="h-3 w-3" />
+              <span>Offline Dataset</span>
+            </button>
+            <button
+              onClick={() => {
+                setDataSourceMode('LIVE_TALLY');
+                if (connectionStatus === 'Disconnected') {
+                  testConnection();
+                }
+              }}
+              className={`px-2.5 py-1 rounded font-semibold transition-all flex items-center space-x-1.5 ${
+                dataSourceMode === 'LIVE_TALLY'
+                  ? 'bg-sky-600 text-white shadow'
+                  : 'text-slate-400 hover:text-slate-200'
+              }`}
+            >
+              <Radio className="h-3 w-3" />
+              <span>Live Tally</span>
+            </button>
           </div>
 
-          {/* Current Company Context Pill */}
+          {/* Context Status Pill */}
+          {dataSourceMode === 'LIVE_TALLY' ? (
+            <div className="flex items-center space-x-2 rounded-full border border-slate-800 bg-[#1E293B] px-3 py-1 text-xs">
+              <span
+                className={`h-2 w-2 rounded-full ${
+                  connectionStatus === 'Connected'
+                    ? 'bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.8)]'
+                    : connectionStatus === 'Connecting'
+                    ? 'bg-amber-400 animate-pulse shadow-[0_0_8px_rgba(251,191,36,0.8)]'
+                    : 'bg-rose-500 shadow-[0_0_8px_rgba(244,63,94,0.8)]'
+                }`}
+              />
+              <span className="text-slate-200 font-medium text-[10px]">
+                {connectionStatus === 'Connected'
+                  ? 'Connected'
+                  : connectionStatus === 'Connecting'
+                  ? 'Connecting...'
+                  : 'Disconnected'}
+              </span>
+            </div>
+          ) : (
+            <div className="flex items-center space-x-2 rounded-full border border-sky-800/60 bg-sky-950/40 px-3 py-1 text-xs text-sky-300">
+              <span className="h-2 w-2 rounded-full bg-sky-400 shadow-[0_0_8px_rgba(56,189,248,0.8)]" />
+              <span className="font-semibold text-[10px] tracking-wide">
+                {activeOfflineDataset ? `${activeOfflineDataset.sourceFileType} Dataset Loaded` : 'Offline Mode Ready'}
+              </span>
+            </div>
+          )}
+
+          {/* Current Company / Dataset Context Pill */}
           <button
             onClick={() => setShowCompanyModal(true)}
             className="flex items-center space-x-2 text-[10px] text-slate-300 bg-slate-900/80 hover:bg-slate-800 px-3 py-1 rounded border border-slate-800 transition-colors"
           >
             <Building2 className="h-3 w-3 text-sky-400" />
             <span className="font-semibold text-slate-200 max-w-[150px] truncate">
-              {selectedCompany ? selectedCompany.name : 'Select Company'}
+              {selectedCompany ? selectedCompany.name : activeOfflineDataset?.companyName || 'Select Company'}
             </span>
             <ChevronDown className="h-2.5 w-2.5 text-slate-400" />
           </button>
@@ -761,6 +848,25 @@ export default function App() {
                   </div>
                </div>
              </div>
+          )}
+
+          {/* Offline Data Import Wizard View */}
+          {currentPage === 'Import Tally Data' && (
+            <ImportTallyDataView
+              onDatasetActivated={(ds) => {
+                setActiveOfflineDataset(ds);
+                setDataSourceMode('OFFLINE_DATASET');
+                setSelectedCompany({
+                  name: ds.companyName || 'Apex Global Trading',
+                  startingFrom: ds.financialYearFrom || '2024-04-01',
+                  endingAt: ds.financialYearTo || '2025-03-31',
+                  isActive: true
+                });
+                fetchOfflineDatasets();
+              }}
+              onNavigateToAudit={() => setCurrentPage('Audit Center')}
+              onNavigateToAnalytics={() => setCurrentPage('Financial Analytics')}
+            />
           )}
 
           {/* Tally Views */}
@@ -999,12 +1105,12 @@ export default function App() {
 
           {/* Companies View / Selection */}
           {(currentPage === 'Companies' || showCompanyModal) && (
-            <div className="max-w-3xl mx-auto space-y-6">
+            <div className="max-w-4xl mx-auto space-y-6">
               <div className="flex items-center justify-between border-b border-slate-800 pb-4">
                 <div>
-                  <h1 className="text-xl font-bold text-slate-100">SELECT TALLY COMPANY</h1>
+                  <h1 className="text-xl font-bold text-slate-100">SELECT COMPANY & DATA SOURCE</h1>
                   <p className="text-xs text-slate-400 mt-0.5">
-                    Query active company contexts directly from TallyPrime integration interface
+                    Connect to live TallyPrime runtime or activate an offline imported XML/JSON/Excel audit dataset
                   </p>
                 </div>
                 {showCompanyModal && (
@@ -1017,71 +1123,180 @@ export default function App() {
                 )}
               </div>
 
-              <div className="rounded-lg border border-slate-800 bg-[#1E293B] p-6 space-y-6 shadow-lg">
-                <div>
-                  <label className="block text-xs font-semibold text-slate-300 mb-2">
-                    Available Company
-                  </label>
-                  {companies.length > 0 ? (
-                    <select
-                      value={selectedCompany?.name || ''}
-                      onChange={(e) => {
-                        const found = companies.find((c) => c.name === e.target.value);
-                        if (found) setSelectedCompany(found);
-                      }}
-                      className="w-full rounded border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100 font-semibold focus:border-sky-500 focus:outline-none"
-                    >
-                      {companies.map((c) => (
-                        <option key={c.id || c.name} value={c.name}>
-                          {c.name} {c.isActive ? '(Active in Tally)' : ''}
-                        </option>
-                      ))}
-                    </select>
-                  ) : (
-                    <div className="rounded border border-slate-800 bg-slate-900/60 p-4 text-center text-xs text-slate-400">
-                      {isFetchingCompanies ? 'Fetching company list from TallyPrime...' : 'No companies detected. Ensure TallyPrime is open and connected.'}
-                    </div>
-                  )}
-                </div>
-
-                {selectedCompany && (
-                  <div className="rounded-lg border border-slate-800 bg-slate-900/80 p-4 space-y-2 text-xs">
-                    <div className="flex justify-between text-slate-300">
-                      <span className="text-slate-400">Financial Year:</span>
-                      <span className="font-mono text-slate-100 font-bold">
-                        {selectedCompany.financialYearFrom || '01-04-2026'} → {selectedCompany.financialYearTo || '31-03-2027'}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {/* Option 1: Live Tally Connection */}
+                <div className="rounded-xl border border-slate-800 bg-[#1E293B] p-5 space-y-4 shadow-lg flex flex-col justify-between">
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center space-x-2">
+                        <div className="p-2 rounded-lg bg-emerald-950/60 border border-emerald-800 text-emerald-400">
+                          <Radio className="h-4 w-4" />
+                        </div>
+                        <h3 className="text-sm font-bold text-slate-100">Live TallyPrime</h3>
+                      </div>
+                      <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full border ${
+                        connectionStatus === 'Connected'
+                          ? 'border-emerald-800 bg-emerald-950/50 text-emerald-400'
+                          : 'border-slate-700 bg-slate-800 text-slate-400'
+                      }`}>
+                        {connectionStatus}
                       </span>
                     </div>
-                    <div className="flex justify-between text-slate-300">
-                      <span className="text-slate-400">Status:</span>
-                      <span className="text-emerald-400 font-semibold">Active in Tally</span>
+
+                    <p className="text-xs text-slate-400">
+                      Direct HTTP/XML connection to active TallyPrime instance running on localhost or LAN.
+                    </p>
+
+                    <div>
+                      <label className="block text-[11px] font-semibold text-slate-300 mb-1.5">
+                        Active Tally Company
+                      </label>
+                      {companies.length > 0 ? (
+                        <select
+                          value={selectedCompany?.name || ''}
+                          onChange={(e) => {
+                            const found = companies.find((c) => c.name === e.target.value);
+                            if (found) {
+                              setSelectedCompany(found);
+                              setDataSourceMode('LIVE_TALLY');
+                            }
+                          }}
+                          className="w-full rounded border border-slate-700 bg-slate-900 px-3 py-2 text-xs text-slate-100 font-semibold focus:border-sky-500 focus:outline-none"
+                        >
+                          {companies.map((c) => (
+                            <option key={c.id || c.name} value={c.name}>
+                              {c.name} {c.isActive ? '(Active)' : ''}
+                            </option>
+                          ))}
+                        </select>
+                      ) : (
+                        <div className="rounded border border-slate-800 bg-slate-900/60 p-3 text-center text-xs text-slate-400">
+                          {isFetchingCompanies ? 'Detecting Tally companies...' : 'No live companies detected. Ensure TallyPrime is open.'}
+                        </div>
+                      )}
                     </div>
                   </div>
-                )}
 
-                <div className="flex items-center space-x-3 pt-2">
-                  <button
-                    onClick={() => fetchCompanies()}
-                    disabled={isFetchingCompanies}
-                    className="flex items-center space-x-2 rounded border border-slate-700 bg-slate-800 hover:bg-slate-700 px-4 py-2 text-xs font-medium text-slate-200"
-                  >
-                    <RefreshCw className={`h-3.5 w-3.5 text-sky-400 ${isFetchingCompanies ? 'animate-spin' : ''}`} />
-                    <span>Refresh Companies</span>
-                  </button>
+                  <div className="pt-3 border-t border-slate-800/80 flex items-center justify-between">
+                    <button
+                      onClick={() => fetchCompanies()}
+                      disabled={isFetchingCompanies}
+                      className="flex items-center space-x-1.5 rounded border border-slate-700 bg-slate-800 hover:bg-slate-700 px-3 py-1.5 text-xs font-medium text-slate-200"
+                    >
+                      <RefreshCw className={`h-3 w-3 text-sky-400 ${isFetchingCompanies ? 'animate-spin' : ''}`} />
+                      <span>Refresh Live</span>
+                    </button>
+                    <button
+                      onClick={() => {
+                        if (selectedCompany) {
+                          setDataSourceMode('LIVE_TALLY');
+                          setShowCompanyModal(false);
+                        }
+                      }}
+                      disabled={!selectedCompany || connectionStatus !== 'Connected'}
+                      className="rounded bg-emerald-600 hover:bg-emerald-500 disabled:bg-slate-800 disabled:text-slate-500 px-3 py-1.5 text-xs font-bold text-white shadow flex items-center space-x-1"
+                    >
+                      <Check className="h-3.5 w-3.5" />
+                      <span>Use Live Tally</span>
+                    </button>
+                  </div>
+                </div>
 
-                  <button
-                    onClick={() => {
-                      if (selectedCompany) {
+                {/* Option 2: Offline Datasets */}
+                <div className="rounded-xl border border-slate-800 bg-[#1E293B] p-5 space-y-4 shadow-lg flex flex-col justify-between">
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center space-x-2">
+                        <div className="p-2 rounded-lg bg-sky-950/60 border border-sky-800 text-sky-400">
+                          <FileUp className="h-4 w-4" />
+                        </div>
+                        <h3 className="text-sm font-bold text-slate-100">Offline Imported Datasets</h3>
+                      </div>
+                      <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full border border-sky-800 bg-sky-950/50 text-sky-300">
+                        {offlineDatasets.length} Available
+                      </span>
+                    </div>
+
+                    <p className="text-xs text-slate-400">
+                      Work offline using normalized Tally XML, JSON, or Excel export files without TallyPrime running.
+                    </p>
+
+                    <div>
+                      <label className="block text-[11px] font-semibold text-slate-300 mb-1.5">
+                        Saved Offline Datasets
+                      </label>
+                      {offlineDatasets.length > 0 ? (
+                        <div className="space-y-1.5 max-h-36 overflow-y-auto pr-1">
+                          {offlineDatasets.map((ds) => {
+                            const isSelected = activeOfflineDataset?.datasetId === ds.datasetId;
+                            return (
+                              <button
+                                key={ds.datasetId}
+                                onClick={() => {
+                                  fetch(`/api/import/datasets/${ds.datasetId}/activate`, { method: 'POST' })
+                                    .then((r) => r.json())
+                                    .then((res) => {
+                                      if (res.success) {
+                                        setActiveOfflineDataset(ds);
+                                        setDataSourceMode('OFFLINE_DATASET');
+                                        setSelectedCompany({
+                                          name: ds.companyName,
+                                          startingFrom: ds.financialYearFrom,
+                                          endingAt: ds.financialYearTo,
+                                          isActive: true
+                                        });
+                                      }
+                                    });
+                                }}
+                                className={`w-full text-left p-2 rounded-lg border text-xs flex items-center justify-between transition-all ${
+                                  isSelected
+                                    ? 'border-sky-500 bg-sky-950/40 text-sky-200 font-semibold'
+                                    : 'border-slate-800 bg-slate-900/60 text-slate-300 hover:border-slate-700'
+                                }`}
+                              >
+                                <div className="truncate">
+                                  <div className="truncate font-semibold">{ds.companyName}</div>
+                                  <div className="text-[10px] text-slate-400 font-mono">
+                                    {ds.sourceFileType} • {ds.summary?.totalVouchers || 0} vouchers • Score: {ds.summary?.qualityScore || 98}%
+                                  </div>
+                                </div>
+                                <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-800 font-mono text-slate-300 ml-2">
+                                  {ds.financialYearFrom?.substring(0, 4)}-{ds.financialYearTo?.substring(2, 4)}
+                                </span>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      ) : (
+                        <div className="rounded border border-slate-800 bg-slate-900/60 p-3 text-center text-xs text-slate-400">
+                          No offline datasets loaded yet.
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="pt-3 border-t border-slate-800/80 flex items-center justify-between">
+                    <button
+                      onClick={() => {
                         setShowCompanyModal(false);
-                        setCurrentPage('Dashboard');
-                      }
-                    }}
-                    disabled={!selectedCompany}
-                    className="flex items-center space-x-2 rounded bg-sky-600 hover:bg-sky-500 disabled:bg-slate-800 px-4 py-2 text-xs font-bold text-white shadow"
-                  >
-                    <Check className="h-4 w-4" />
-                    <span>Select Company</span>
-                  </button>
+                        setCurrentPage('Import Tally Data');
+                      }}
+                      className="flex items-center space-x-1.5 rounded border border-sky-700 bg-sky-900/40 hover:bg-sky-900/60 px-3 py-1.5 text-xs font-semibold text-sky-200"
+                    >
+                      <FileUp className="h-3 w-3" />
+                      <span>+ Import New File</span>
+                    </button>
+                    <button
+                      onClick={() => {
+                        setDataSourceMode('OFFLINE_DATASET');
+                        setShowCompanyModal(false);
+                      }}
+                      className="rounded bg-sky-600 hover:bg-sky-500 px-3 py-1.5 text-xs font-bold text-white shadow flex items-center space-x-1"
+                    >
+                      <Check className="h-3.5 w-3.5" />
+                      <span>Use Offline Mode</span>
+                    </button>
+                  </div>
                 </div>
               </div>
             </div>

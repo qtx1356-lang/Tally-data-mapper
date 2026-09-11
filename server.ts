@@ -48,12 +48,18 @@ import { phase32yRouter } from "./src/server/phase32yRouter";
 import { phase32zRouter } from "./src/server/phase32zRouter";
 import { phase33Router } from "./src/server/phase33Router";
 import { phase33aRouter } from "./src/server/phase33aRouter";
+import { offlineDataImportRouter } from "./src/server/offlineDataImportRouter";
 
 async function startServer() {
   const app = express();
   const PORT = 3000;
 
-  app.use(express.json());
+  app.use(express.json({ limit: "50mb" }));
+  app.use(express.urlencoded({ limit: "50mb", extended: true }));
+
+  // Offline Data Import & Dataset API
+  app.use("/api/import", offlineDataImportRouter);
+  app.use("/api/offline-dataset", offlineDataImportRouter);
 
   // Phase 32X - Multi-Company Consolidation & Group Reporting
   app.use("/api/phase32x", phase32xRouter);
