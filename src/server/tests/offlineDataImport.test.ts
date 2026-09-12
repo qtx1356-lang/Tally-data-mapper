@@ -948,21 +948,80 @@ export async function runOfflineDataImportTests(): Promise<{
       `Successfully cleaned ${cleanedCount} expired session(s).`
     );
 
-    // Test 4.5: Malformed JSON error safety
+    // Test 4.5: Malformed JSON error safety & Numeric Array Regression Test
+    const numericArrayJsonPath = path.join(testStorageDir, 'tally_numeric_array.json');
+    const numericArrayOutputPath = path.join(testStorageDir, 'tally_numeric_array_out.json');
+    const numericArrayPayload = {
+      ENVELOPE: {
+        HEADER: {
+          TALLYREQUEST: 'Export Data',
+          VERSION: [1, 0]
+        },
+        BODY: {
+          EXPORTDATA: {
+            TALLYMESSAGE: {
+              COMPANY: { NAME: 'Tally Real DayBook Ltd' },
+              DayBook: [
+                0, // Numeric element inside array (should be handled without throwing Malformed JSON)
+                {
+                  VOUCHERNUMBER: 'VCH-REAL-001',
+                  VOUCHERTYPENAME: 'Payment',
+                  DATE: '20250115',
+                  PARTYLEDGERNAME: 'Supplier Inc',
+                  NARRATION: 'Bank Transfer for Invoice #998',
+                  ALLLEDGERENTRIES: [
+                    { LEDGERNAME: 'Supplier Inc', AMOUNT: 25000, ISDEEMEDPOSITIVE: 'Yes' },
+                    { LEDGERNAME: 'HDFC Bank Account', AMOUNT: -25000, ISDEEMEDPOSITIVE: 'No' }
+                  ]
+                },
+                -10.5 // Negative numeric element inside array
+              ]
+            }
+          }
+        }
+      }
+    };
+    fs.writeFileSync(numericArrayJsonPath, JSON.stringify(numericArrayPayload), 'utf-8');
+
+    let numericArrayResult: any = null;
+    let numericArrayError: any = null;
+    try {
+      numericArrayResult = await StreamingJsonParser.parseFile(
+        numericArrayJsonPath,
+        numericArrayOutputPath,
+        'tally_numeric_array.json'
+      );
+    } catch (err: any) {
+      numericArrayError = err;
+    }
+
+    assert(
+      'TALLY JSON IMPORT FIX - StreamingJsonParser handles numeric array elements (0, -10.5) and header arrays ([1, 0]) without throwing unexpected character error',
+      numericArrayError === null &&
+      numericArrayResult !== null &&
+      numericArrayResult.preview.counts.vouchers === 1 &&
+      numericArrayResult.sampleVouchers[0].voucherNumber === 'VCH-REAL-001' &&
+      numericArrayResult.sampleVouchers[0].totalDebit === 25000 &&
+      numericArrayResult.sampleVouchers[0].totalCredit === 25000,
+      `Parsed voucher count: ${numericArrayResult?.preview.counts.vouchers}, Error: ${numericArrayError?.message || 'none'}`
+    );
+
     const malformedJsonPath = path.join(testStorageDir, 'malformed.json');
     const malformedOutputPath = path.join(testStorageDir, 'malformed_out.json');
     fs.writeFileSync(malformedJsonPath, '{ "DayBook": [ { "VOUCHER": 1 }, INVALID_JSON_SYNTAX', 'utf-8');
 
     let caughtMalformedError = false;
+    let malformedErrorMessage = '';
     try {
       await StreamingJsonParser.parseFile(malformedJsonPath, malformedOutputPath, 'malformed.json');
     } catch (malErr: any) {
       caughtMalformedError = true;
+      malformedErrorMessage = malErr.message || '';
     }
     assert(
-      'PRODUCTION FIX #4 - Malformed JSON handles syntax errors gracefully without unhandled crashes',
-      caughtMalformedError === true,
-      'Malformed JSON caught cleanly.'
+      'PRODUCTION FIX #4 - Malformed JSON handles syntax errors gracefully with location context',
+      caughtMalformedError === true && malformedErrorMessage.includes('Invalid JSON'),
+      `Malformed error caught cleanly: ${malformedErrorMessage}`
     );
 
     // =========================================================================

@@ -103,7 +103,16 @@ export class StreamingJsonParser {
     // States: 'HEADER' | 'IN_ARRAY' | 'FOOTER'
     let state: 'HEADER' | 'IN_ARRAY' | 'FOOTER' = 'HEADER';
     let objectDepth = 0;
+    let arrayDepth = 0;
     let currentObjectChunks: string[] = [];
+
+    // Position tracking for rich error reporting
+    let byteOffset = 0;
+    let lineNum = 1;
+    let colNum = 1;
+
+    let recentCharBuffer = '';
+    const MAX_RECENT_BUFFER = 100;
 
     // Pre-array buffer & key stack to capture header metadata and exact container hierarchy
     let headerBuffer = '';
@@ -124,7 +133,7 @@ export class StreamingJsonParser {
 
     let lastProgressReportTime = Date.now();
 
-    const processSingleVoucherObject = (objStr: string) => {
+    const processSingleVoucherObject = (objStr: string, itemPath?: string) => {
       let rawVch: any;
       try {
         rawVch = JSON.parse(objStr);
@@ -133,40 +142,93 @@ export class StreamingJsonParser {
         return;
       }
 
-      // Check if wrapped voucher e.g. { "VOUCHER": { ... } } or { "voucher": { ... } }
+      if (!rawVch || typeof rawVch !== 'object') {
+        return;
+      }
+
+      // Header metadata extraction from object if present
+      if (!detectedCompany) {
+        const comp = rawVch.COMPANY || rawVch.companyName || rawVch.company || rawVch.NAME;
+        if (typeof comp === 'string' && comp.trim()) detectedCompany = comp.trim();
+      }
+      if (!rawStartingFrom) {
+        const sf = rawVch.STARTINGFROM || rawVch.from || rawVch.startDate || rawVch.fromPeriod;
+        if (typeof sf === 'string' && sf.trim()) rawStartingFrom = sf.trim();
+      }
+      if (!rawEndingAt) {
+        const ea = rawVch.ENDINGAT || rawVch.to || rawVch.endDate || rawVch.toPeriod;
+        if (typeof ea === 'string' && ea.trim()) rawEndingAt = ea.trim();
+      }
+      if (!rawFyFrom) {
+        const ff = rawVch.financialYearFrom;
+        if (typeof ff === 'string' && ff.trim()) rawFyFrom = ff.trim();
+      }
+      if (!rawFyTo) {
+        const ft = rawVch.financialYearTo;
+        if (typeof ft === 'string' && ft.trim()) rawFyTo = ft.trim();
+      }
+
+      // Check if wrapped voucher e.g. { "VOUCHER": { ... } } or { "voucher": { ... } } or { "DAYBOOK": { ... } }
       let isWrapped = false;
       let wrapperKey: string | null = null;
       let v: any = rawVch;
 
-      if (rawVch && typeof rawVch === 'object') {
-        if (rawVch.VOUCHER && typeof rawVch.VOUCHER === 'object') {
-          v = rawVch.VOUCHER;
-          isWrapped = true;
-          wrapperKey = 'VOUCHER';
-        } else if (rawVch.voucher && typeof rawVch.voucher === 'object') {
-          v = rawVch.voucher;
-          isWrapped = true;
-          wrapperKey = 'voucher';
-        }
+      if (rawVch.VOUCHER && typeof rawVch.VOUCHER === 'object') {
+        v = rawVch.VOUCHER;
+        isWrapped = true;
+        wrapperKey = 'VOUCHER';
+      } else if (rawVch.voucher && typeof rawVch.voucher === 'object') {
+        v = rawVch.voucher;
+        isWrapped = true;
+        wrapperKey = 'voucher';
+      } else if (rawVch.DAYBOOK && typeof rawVch.DAYBOOK === 'object') {
+        v = rawVch.DAYBOOK;
+        isWrapped = true;
+        wrapperKey = 'DAYBOOK';
+      }
+
+      // Check if object is a candidate voucher object
+      const vchNumberRaw = v.voucherNumber || v.VOUCHERNUMBER || v.number || v.vchNo || v.VchNo || v.invoiceNo || null;
+      const vchTypeRaw = v.voucherType || v.VOUCHERTYPENAME || v.VOUCHERTYPE || v.type || v.Type || v.vchType || v.VchType || null;
+      const rawDate = v.date || v.DATE || v.Date || null;
+      const partyNameRaw = v.partyLedgerName || v.PARTYLEDGERNAME || v.party || v.Party || v.partyName || null;
+      const narrationRaw = v.narration || v.NARRATION || v.Narration || null;
+
+      const hasEntries = Boolean(
+        Array.isArray(v.entries) ||
+        Array.isArray(v.ALLLEDGERENTRIES) ||
+        (v.ALLLEDGERENTRIES && Array.isArray(v.ALLLEDGERENTRIES.LEDGERENTRIES)) ||
+        Array.isArray(v['ALLLEDGERENTRIES.LIST']) ||
+        Array.isArray(v.LEDGERENTRIES) ||
+        Array.isArray(v.ledgerEntries) ||
+        Array.isArray(v.lines) ||
+        (v.ALLLEDGERENTRIES && typeof v.ALLLEDGERENTRIES === 'object')
+      );
+
+      const isVoucherCandidate = Boolean(vchNumberRaw || vchTypeRaw || rawDate || partyNameRaw || narrationRaw || hasEntries || isWrapped);
+
+      if (!isVoucherCandidate) {
+        return; // Skip non-voucher metadata objects
       }
 
       totalVouchers++;
       const vchIdx = totalVouchers - 1;
 
       // Construct exact voucher JSON path reflecting genuine source hierarchy
-      const vchBasePath = detectedContainerPath === '$' ? `$[${vchIdx}]` : `${detectedContainerPath}[${vchIdx}]`;
-      const voucherJsonPath = isWrapped && wrapperKey ? `${vchBasePath}.${wrapperKey}` : vchBasePath;
+      let voucherJsonPath: string;
+      if (itemPath) {
+        voucherJsonPath = isWrapped && wrapperKey ? `${itemPath}.${wrapperKey}` : itemPath;
+      } else {
+        const vchBasePath = detectedContainerPath === '$' ? `$[${vchIdx}]` : `${detectedContainerPath}[${vchIdx}]`;
+        voucherJsonPath = isWrapped && wrapperKey ? `${vchBasePath}.${wrapperKey}` : vchBasePath;
+      }
 
       // STRICT ZERO-FABRICATION: Never generate VCH-* or default 'Journal'
-      const vchNumberRaw = v.voucherNumber || v.VOUCHERNUMBER || v.number || v.vchNo || v.VchNo || v.invoiceNo || null;
       const vchNumber = vchNumberRaw ? String(vchNumberRaw).trim() : null;
-
-      const vchTypeRaw = v.voucherType || v.VOUCHERTYPENAME || v.VOUCHERTYPE || v.type || v.Type || v.vchType || v.VchType || null;
       const vchType = vchTypeRaw ? String(vchTypeRaw).trim() : null;
       
       // Date normalization
       let vDate: string | null = null;
-      const rawDate = v.date || v.DATE || v.Date || null;
       if (rawDate) {
         const strDate = String(rawDate).trim();
         if (/^\d{8}$/.test(strDate)) {
@@ -183,9 +245,7 @@ export class StreamingJsonParser {
         if (!maxDate || vDate > maxDate) maxDate = vDate;
       }
 
-      const partyNameRaw = v.partyLedgerName || v.PARTYLEDGERNAME || v.party || v.Party || v.partyName || null;
       const partyName = partyNameRaw ? String(partyNameRaw).trim() : null;
-      const narrationRaw = v.narration || v.NARRATION || v.Narration || null;
       const narration = narrationRaw ? String(narrationRaw).trim() : null;
 
       // Extract ledger lines and detect the exact source hierarchy segments for accurate child path construction
@@ -380,6 +440,51 @@ export class StreamingJsonParser {
 
           for (let i = 0; i < text.length; i++) {
             const char = text[i];
+            byteOffset++;
+
+            if (recentCharBuffer.length >= MAX_RECENT_BUFFER) {
+              recentCharBuffer = recentCharBuffer.substring(1);
+            }
+            recentCharBuffer += char;
+
+            if (char === '\n') {
+              lineNum++;
+              colNum = 1;
+            } else {
+              colNum++;
+            }
+
+            // If buffering an item object `{ ... }` at element level
+            if (objectDepth > 0) {
+              currentObjectChunks.push(char);
+
+              if (!inString) {
+                if (char === '"') {
+                  inString = true;
+                  isEscaped = false;
+                } else if (char === '{') {
+                  objectDepth++;
+                } else if (char === '}') {
+                  objectDepth--;
+                  if (objectDepth === 0) {
+                    const objStr = currentObjectChunks.join('');
+                    currentObjectChunks = [];
+                    const vchItemIdx = totalVouchers;
+                    const itemPath = detectedContainerPath === '$' ? `$[${vchItemIdx}]` : `${detectedContainerPath}[${vchItemIdx}]`;
+                    processSingleVoucherObject(objStr, itemPath);
+                  }
+                }
+              } else {
+                if (isEscaped) {
+                  isEscaped = false;
+                } else if (char === '\\') {
+                  isEscaped = true;
+                } else if (char === '"') {
+                  inString = false;
+                }
+              }
+              continue;
+            }
 
             // 1. HEADER STATE: scan until array opening `[` and accurately detect container JSON path
             if (state === 'HEADER') {
@@ -402,6 +507,7 @@ export class StreamingJsonParser {
                 } else if (char === '[') {
                   // Target array detected!
                   state = 'IN_ARRAY';
+                  arrayDepth = 1;
 
                   // Build exact detected container path from keyStack and currentPendingKey
                   const pathSegments: string[] = [];
@@ -422,19 +528,19 @@ export class StreamingJsonParser {
 
                   // Inspect header buffer for Company & FY
                   const compMatch = headerBuffer.match(/"(?:COMPANY|companyName|company|NAME)"\s*:\s*"([^"]+)"/i);
-                  if (compMatch) detectedCompany = compMatch[1].trim();
+                  if (compMatch && !detectedCompany) detectedCompany = compMatch[1].trim();
 
                   const startMatch = headerBuffer.match(/"(?:STARTINGFROM|from|startDate|fromPeriod)"\s*:\s*"([^"]+)"/i);
-                  if (startMatch) rawStartingFrom = startMatch[1].trim();
+                  if (startMatch && !rawStartingFrom) rawStartingFrom = startMatch[1].trim();
 
                   const endMatch = headerBuffer.match(/"(?:ENDINGAT|to|endDate|toPeriod)"\s*:\s*"([^"]+)"/i);
-                  if (endMatch) rawEndingAt = endMatch[1].trim();
+                  if (endMatch && !rawEndingAt) rawEndingAt = endMatch[1].trim();
 
                   const fyFromMatch = headerBuffer.match(/"financialYearFrom"\s*:\s*"([^"]+)"/i);
-                  if (fyFromMatch) rawFyFrom = fyFromMatch[1].trim();
+                  if (fyFromMatch && !rawFyFrom) rawFyFrom = fyFromMatch[1].trim();
 
                   const fyToMatch = headerBuffer.match(/"financialYearTo"\s*:\s*"([^"]+)"/i);
-                  if (fyToMatch) rawFyTo = fyToMatch[1].trim();
+                  if (fyToMatch && !rawFyTo) rawFyTo = fyToMatch[1].trim();
                 }
               } else {
                 if (isHeaderEscaped) {
@@ -454,33 +560,37 @@ export class StreamingJsonParser {
               continue;
             }
 
-            // 2. IN_ARRAY STATE: incrementally parse objects `{ ... }`
+            // 2. IN_ARRAY STATE: incrementally parse objects `{ ... }` or primitive values in array
             if (state === 'IN_ARRAY') {
-              if (objectDepth > 0) {
-                currentObjectChunks.push(char);
-              }
-
               if (!inString) {
                 if (char === '"') {
                   inString = true;
+                  isEscaped = false;
                 } else if (char === '{') {
-                  if (objectDepth === 0) {
-                    currentObjectChunks = ['{'];
+                  objectDepth = 1;
+                  currentObjectChunks = ['{'];
+                } else if (char === '[') {
+                  arrayDepth++;
+                } else if (char === ']') {
+                  arrayDepth--;
+                  if (arrayDepth === 0) {
+                    if (totalVouchers > 0) {
+                      state = 'FOOTER';
+                    } else {
+                      // Return to header scanning if this was a non-voucher array (e.g. VERSION: [1, 0])
+                      state = 'HEADER';
+                    }
                   }
-                  objectDepth++;
-                } else if (char === '}') {
-                  objectDepth--;
-                  if (objectDepth === 0) {
-                    // Complete item assembled
-                    const objStr = currentObjectChunks.join('');
-                    currentObjectChunks = [];
-                    processSingleVoucherObject(objStr);
-                  }
-                } else if (char === ']' && objectDepth === 0) {
-                  // End of array
-                  state = 'FOOTER';
-                } else if (objectDepth === 0 && char !== ',' && !/\s/.test(char)) {
-                  throw new Error(`Malformed JSON: unexpected character '${char}' in array`);
+                } else if (char === ',' || /\s/.test(char)) {
+                  // Standard array value separator or whitespace
+                  continue;
+                } else if (/^[0-9\-+.eE]|true|false|null$/i.test(char)) {
+                  // Standard primitive array token character (numbers, negative numbers, decimals, scientific notation, booleans, null)
+                  continue;
+                } else {
+                  // Genuine JSON syntax error
+                  const snippet = recentCharBuffer.slice(-30).replace(/\s+/g, ' ');
+                  throw new Error(`Invalid JSON in ${fileName} (phase: Processing) at byte ${byteOffset}, line ${lineNum}, column ${colNum}, path ${detectedContainerPath}: Unexpected character '${char}' in array near "${snippet}"`);
                 }
               } else {
                 if (isEscaped) {
@@ -496,7 +606,7 @@ export class StreamingJsonParser {
 
             // 3. FOOTER STATE
             if (state === 'FOOTER') {
-              // Nothing more needed after main vouchers array
+              // Ignore remaining container closing chars or whitespace after voucher array finishes
             }
           }
         } catch (streamDataErr) {
@@ -506,11 +616,11 @@ export class StreamingJsonParser {
       });
 
       readStream.on('end', () => {
-        if (objectDepth > 0 || inString || state === 'IN_ARRAY') {
-          return reject(new Error('Malformed JSON: unexpected end of stream with unclosed syntax or array'));
+        if (objectDepth > 0 || inString) {
+          return reject(new Error(`Invalid JSON in ${fileName} (phase: Processing) at byte ${byteOffset}, line ${lineNum}, column ${colNum}, path ${detectedContainerPath}: unexpected end of stream with unclosed syntax`));
         }
         if (totalVouchers === 0 && state === 'HEADER') {
-          return reject(new Error('Invalid Tally JSON data: no vouchers or array structure found'));
+          return reject(new Error(`Invalid Tally JSON data in ${fileName}: no vouchers found in source JSON structure`));
         }
         resolve();
       });

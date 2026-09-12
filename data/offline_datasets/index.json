@@ -1,7 +1,7 @@
 {
-  "updatedAt": "2026-09-11T15:11:25.724Z",
-  "activeDatasetId": "ds-offline-1789118789269-j6w0a",
-  "datasetCount": 13,
+  "updatedAt": "2026-09-12T05:03:00.100Z",
+  "activeDatasetId": "ds-offline-1789189380097-2okkx",
+  "datasetCount": 15,
   "datasets": [
     {
       "id": "ds-offline-1789118789269-j6w0a",
@@ -60,7 +60,7 @@
         "reviewRequired": 8,
         "unmapped": 0
       },
-      "isActive": true,
+      "isActive": false,
       "isDemoData": true,
       "isStreamingDataset": false,
       "storageMode": "SINGLE_JSON"
@@ -827,6 +827,130 @@
       "isDemoData": false,
       "isStreamingDataset": false,
       "storageMode": "SINGLE_JSON"
+    },
+    {
+      "id": "ds-offline-1789139485720-91j4s",
+      "name": "RETRY CORP (JSON)",
+      "description": "Imported from retry_test.json with 1 vouchers and 0 masters.",
+      "sourceFileName": "retry_test.json",
+      "sourceFileType": "JSON",
+      "sourceFileSize": 1000,
+      "companyName": "RETRY CORP",
+      "financialYearFrom": null,
+      "financialYearTo": null,
+      "isFinancialYearDetected": false,
+      "financialYearStatus": "REVIEW_REQUIRED",
+      "financialYearExplanation": "Financial year was not detected in the source data.",
+      "financialYearDetectionSource": "Not Detected in Source Data",
+      "importedAt": "2026-09-11T15:11:25.720Z",
+      "totalRecords": 1,
+      "masterCounts": {
+        "ledgers": 0,
+        "groups": 0,
+        "parties": 0,
+        "stockItems": 0,
+        "costCentres": 0,
+        "bankAccounts": 0
+      },
+      "voucherCounts": {
+        "total": 1,
+        "sales": 0,
+        "purchase": 0,
+        "payment": 0,
+        "receipt": 0,
+        "journal": 0,
+        "contra": 0,
+        "other": 1
+      },
+      "dataQualityScore": 100,
+      "dataQualityReport": {
+        "score": 100,
+        "totalRecordsChecked": 1,
+        "passedRecords": 1,
+        "duplicateVouchers": 0,
+        "missingDates": 0,
+        "invalidAmounts": 0,
+        "unbalancedVouchers": 0,
+        "orphanLedgers": 0,
+        "unmappedFieldsCount": 0,
+        "reviewRequiredFieldsCount": 0,
+        "warnings": [],
+        "errors": [],
+        "recommendations": []
+      },
+      "status": "Ready",
+      "mappingsCount": {
+        "total": 0,
+        "mapped": 0,
+        "reviewRequired": 0,
+        "unmapped": 0
+      },
+      "isActive": false,
+      "isDemoData": false,
+      "isStreamingDataset": false,
+      "storageMode": "SINGLE_JSON"
+    },
+    {
+      "id": "ds-offline-1789189380097-2okkx",
+      "name": "Apex Quantum Stream Ltd (Committed) (JSON)",
+      "description": "Imported from daybook_streaming_test.json with 120 vouchers and 0 masters.",
+      "sourceFileName": "daybook_streaming_test.json",
+      "sourceFileType": "JSON",
+      "sourceFileSize": 38933,
+      "companyName": "Apex Quantum Stream Ltd (Committed)",
+      "financialYearFrom": null,
+      "financialYearTo": null,
+      "isFinancialYearDetected": false,
+      "financialYearStatus": "REVIEW_REQUIRED",
+      "financialYearExplanation": "Financial year was not detected in the source data.",
+      "financialYearDetectionSource": "Not Detected in Source Data",
+      "importedAt": "2026-09-12T05:03:00.098Z",
+      "totalRecords": 120,
+      "masterCounts": {
+        "ledgers": 0,
+        "groups": 0,
+        "parties": 0,
+        "stockItems": 0,
+        "costCentres": 0,
+        "bankAccounts": 0
+      },
+      "voucherCounts": {
+        "total": 120,
+        "sales": 60,
+        "purchase": 0,
+        "payment": 60,
+        "receipt": 0,
+        "journal": 0,
+        "contra": 0,
+        "other": 0
+      },
+      "dataQualityScore": 88,
+      "dataQualityReport": {
+        "score": 88,
+        "totalRecordsChecked": 120,
+        "passedRecords": 120,
+        "duplicateVouchers": 0,
+        "missingDates": 0,
+        "invalidAmounts": 0,
+        "unbalancedVouchers": 0,
+        "orphanLedgers": 0,
+        "unmappedFieldsCount": 0,
+        "reviewRequiredFieldsCount": 8,
+        "warnings": [
+          "8 fields require mapping confirmation or manual review."
+        ],
+        "errors": [],
+        "recommendations": []
+      },
+      "status": "Ready",
+      "mappingsCount": {
+        "total": 13,
+        "mapped": 5,
+        "reviewRequired": 8,
+        "unmapped": 0
+      },
+      "isActive": true,
+      "isDemoData": false
     }
   ]
 }
