@@ -1,0 +1,17 @@
+[
+  {
+    "profileId": "prof_exfin_corp",
+    "companyId": "comp_exfin_corp_id",
+    "companyName": "EXFIN Corp",
+    "tallyVersion": "TallyPrime 4.2",
+    "financialYear": "2026-2027",
+    "baseCurrency": "INR",
+    "countryRegion": "India",
+    "booksFrom": "2026-04-01",
+    "createdAt": "2026-09-12T06:43:58.060Z",
+    "updatedAt": "2026-09-12T06:43:58.060Z",
+    "schemaVersion": "sch_v2_evolved",
+    "profileStatus": "PROFILED",
+    "confidence": 94
+  }
+]

@@ -1,0 +1,49 @@
+[
+  {
+    "schemaId": "sch_v1_baseline",
+    "company": "EXFIN Corp",
+    "tallyVersion": "TallyPrime 4.0",
+    "detectedAt": "2026-09-09T06:43:58.060Z",
+    "hash": "5f4e3d2c1b0a",
+    "status": "ARCHIVED",
+    "changesCount": 0,
+    "changes": []
+  },
+  {
+    "schemaId": "sch_v2_evolved",
+    "company": "EXFIN Corp",
+    "tallyVersion": "TallyPrime 4.2",
+    "detectedAt": "2026-09-12T06:43:58.060Z",
+    "hash": "9f8e7d6c5b4a",
+    "status": "ACTIVE",
+    "changesCount": 3,
+    "changes": [
+      {
+        "type": "Added Field",
+        "collection": "Voucher",
+        "fieldName": "GSTPercentage",
+        "newValue": "Number",
+        "suggestedAction": "Auto-migrate if used in Sales Tax computations",
+        "confidence": "HIGH"
+      },
+      {
+        "type": "Renamed Field",
+        "collection": "Ledger",
+        "fieldName": "TaxRegistrationNo",
+        "oldValue": "PartyGSTIN",
+        "newValue": "TaxRegistrationNo",
+        "suggestedAction": "Review Mapping required: PartyGSTIN renamed to TaxRegistrationNo",
+        "confidence": "MEDIUM"
+      },
+      {
+        "type": "Type Changed",
+        "collection": "VoucherLine",
+        "fieldName": "CGSTAmount",
+        "oldValue": "String",
+        "newValue": "Number",
+        "suggestedAction": "Safe type conversion (String to Number widening)",
+        "confidence": "HIGH"
+      }
+    ]
+  }
+]

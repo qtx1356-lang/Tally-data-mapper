@@ -1,0 +1,57 @@
+[
+  {
+    "mappingId": "map_party_gstin",
+    "canonicalConcept": "Tax",
+    "sourceField": "PartyGSTIN",
+    "role": "Tax Registration Code Identifier",
+    "confidence": "HIGH",
+    "evidence": [
+      "Field name exact match with standard GSTIN suffix",
+      "Format contains 15 alphanumeric characters"
+    ],
+    "version": "1.0.0",
+    "companyId": "comp_exfin_corp_id",
+    "status": "APPROVED"
+  },
+  {
+    "mappingId": "map_voucher_date",
+    "canonicalConcept": "Date",
+    "sourceField": "VoucherDate",
+    "role": "Primary Entry Date",
+    "confidence": "HIGH",
+    "evidence": [
+      "Matches ISO Date string standards",
+      "Assigned directly to parent entry root node"
+    ],
+    "version": "1.0.0",
+    "companyId": "comp_exfin_corp_id",
+    "status": "APPROVED"
+  },
+  {
+    "mappingId": "map_ledger_balance",
+    "canonicalConcept": "Amount",
+    "sourceField": "OpeningBalance",
+    "role": "Starting Fiscal Position Value",
+    "confidence": "MEDIUM",
+    "evidence": [
+      "Numerical amount format",
+      "Located inside standard Ledger group tags"
+    ],
+    "version": "1.0.0",
+    "companyId": "comp_exfin_corp_id",
+    "status": "SUGGESTED"
+  },
+  {
+    "mappingId": "map_unclear_bal",
+    "canonicalConcept": "Amount",
+    "sourceField": "Balance",
+    "role": "Generic Account Balance",
+    "confidence": "LOW",
+    "evidence": [
+      "Field named Balance lacks context of opening, closing, or credit/debit distinction"
+    ],
+    "version": "1.0.0",
+    "companyId": "comp_exfin_corp_id",
+    "status": "SUGGESTED"
+  }
+]

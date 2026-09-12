@@ -1,0 +1,26 @@
+[
+  {
+    "templateId": "tpl_global_accounting",
+    "name": "Global Double-Entry Ledger Mapping",
+    "type": "Global",
+    "priority": 1,
+    "conceptsCount": 22,
+    "matchScore": "Strong Match"
+  },
+  {
+    "templateId": "tpl_indian_taxation",
+    "name": "Indian GST / Corporate Ledger Mapping",
+    "type": "Industry",
+    "priority": 2,
+    "conceptsCount": 15,
+    "matchScore": "Strong Match"
+  },
+  {
+    "templateId": "tpl_tallyprime_4_2",
+    "name": "TallyPrime v4.2 Standard Adapter Pack",
+    "type": "Tally Version",
+    "priority": 3,
+    "conceptsCount": 30,
+    "matchScore": "Exact Match"
+  }
+]

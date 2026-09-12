@@ -1,0 +1,65 @@
+[
+  {
+    "viewId": "view_sal_day_book",
+    "viewName": "Sales Invoices Only",
+    "reportId": "rep_day_book",
+    "filters": [
+      {
+        "columnId": "vtype",
+        "operator": "EQUALS",
+        "value": "Sales"
+      }
+    ],
+    "columns": [
+      "date",
+      "vnum",
+      "party",
+      "amount"
+    ],
+    "grouping": [],
+    "sorting": [
+      {
+        "columnId": "date",
+        "direction": "DESC"
+      }
+    ],
+    "isFavorite": true,
+    "shared": true,
+    "owner": "Admin",
+    "createdAt": "2026-09-12T06:43:58.061Z"
+  },
+  {
+    "viewId": "view_cash_ledg_flow",
+    "viewName": "Cash Receipts Running View",
+    "reportId": "rep_general_ledger",
+    "filters": [
+      {
+        "columnId": "vtype",
+        "operator": "EQUALS",
+        "value": "Receipt"
+      },
+      {
+        "columnId": "particulars",
+        "operator": "CONTAINS",
+        "value": "Cash"
+      }
+    ],
+    "columns": [
+      "date",
+      "particulars",
+      "credit",
+      "balance"
+    ],
+    "grouping": [],
+    "sorting": [
+      {
+        "columnId": "date",
+        "direction": "ASC"
+      }
+    ],
+    "isFavorite": false,
+    "shared": false,
+    "owner": "Auditor",
+    "createdAt": "2026-09-12T06:43:58.061Z"
+  }
+]

@@ -1,0 +1,96 @@
+[
+  {
+    "dashboardId": "dash_exfin_executive",
+    "name": "EXFIN Corp Executive Summary",
+    "description": "High-level financial KPIs, cash flow margins, outstanding profiles, and quick operational summaries.",
+    "version": "1.0.0",
+    "createdAt": "2026-09-12T06:43:58.061Z",
+    "updatedAt": "2026-09-12T06:43:58.061Z",
+    "widgets": [
+      {
+        "widgetId": "w_kpi_cash_balance",
+        "title": "Current Liquid Balance",
+        "type": "KPI",
+        "source": "rep_general_ledger",
+        "x": 0,
+        "y": 0,
+        "w": 3,
+        "h": 2,
+        "filters": [],
+        "calculation": "SUM(closing_balance)",
+        "visualization": {
+          "color": "emerald"
+        },
+        "refreshPolicy": "LIVE",
+        "status": "LIVE",
+        "explanation": "Derived live from general ledger bank and cash mappings."
+      },
+      {
+        "widgetId": "w_kpi_quick_ratio",
+        "title": "Quick Ratio",
+        "type": "KPI",
+        "source": "rep_trial_balance",
+        "x": 3,
+        "y": 0,
+        "w": 3,
+        "h": 2,
+        "filters": [],
+        "calculation": "QuickAssets / CurrentLiabilities",
+        "visualization": {
+          "color": "indigo"
+        },
+        "refreshPolicy": "LIVE",
+        "status": "LIVE",
+        "explanation": "Measures high-liquidity financial position. (Quick Assets / Current Liabilities)"
+      },
+      {
+        "widgetId": "w_chart_rev_margin",
+        "title": "Monthly Revenue vs Costs",
+        "type": "AREA_CHART",
+        "source": "rep_profit_loss",
+        "x": 0,
+        "y": 2,
+        "w": 6,
+        "h": 4,
+        "filters": [],
+        "visualization": {
+          "xAxis": "month",
+          "areas": [
+            {
+              "key": "Revenue",
+              "stroke": "#10B981",
+              "fill": "#D1FAE5"
+            },
+            {
+              "key": "OperatingExpenses",
+              "stroke": "#EF4444",
+              "fill": "#FEE2E2"
+            }
+          ]
+        },
+        "refreshPolicy": "LIVE",
+        "status": "LIVE",
+        "explanation": "Dynamic revenue trends mapped against expense ledger groups."
+      },
+      {
+        "widgetId": "w_ranking_stock",
+        "title": "Top Stock by Closing Value",
+        "type": "RANKING_LIST",
+        "source": "rep_stock_summary",
+        "x": 6,
+        "y": 0,
+        "w": 6,
+        "h": 6,
+        "filters": [],
+        "visualization": {
+          "labelKey": "item",
+          "valueKey": "value",
+          "limit": 5
+        },
+        "refreshPolicy": "SCHEDULED",
+        "status": "CACHED",
+        "explanation": "Top 5 inventory stock item positions ranked by closing evaluation."
+      }
+    ]
+  }
+]
