@@ -168,23 +168,33 @@ export class StreamingJsonParser {
         if (typeof ft === 'string' && ft.trim()) rawFyTo = ft.trim();
       }
 
-      // Check if wrapped voucher e.g. { "VOUCHER": { ... } } or { "voucher": { ... } } or { "DAYBOOK": { ... } }
+      // Check if wrapped voucher e.g. { "VOUCHER": { ... } } or { "voucher": { ... } } or { "DAYBOOK": { ... } } or { "TALLYMESSAGE": { "VOUCHER": { ... } } }
       let isWrapped = false;
       let wrapperKey: string | null = null;
       let v: any = rawVch;
 
-      if (rawVch.VOUCHER && typeof rawVch.VOUCHER === 'object') {
-        v = rawVch.VOUCHER;
+      if (rawVch.ENVELOPE && typeof rawVch.ENVELOPE === 'object') {
+        v = rawVch.ENVELOPE.BODY?.DATA?.TALLYMESSAGE || rawVch.ENVELOPE.BODY?.TALLYMESSAGE || rawVch.ENVELOPE;
         isWrapped = true;
-        wrapperKey = 'VOUCHER';
-      } else if (rawVch.voucher && typeof rawVch.voucher === 'object') {
-        v = rawVch.voucher;
+        wrapperKey = 'ENVELOPE';
+      }
+      if (v.TALLYMESSAGE && typeof v.TALLYMESSAGE === 'object') {
+        v = v.TALLYMESSAGE;
         isWrapped = true;
-        wrapperKey = 'voucher';
-      } else if (rawVch.DAYBOOK && typeof rawVch.DAYBOOK === 'object') {
-        v = rawVch.DAYBOOK;
+        wrapperKey = wrapperKey ? `${wrapperKey}.TALLYMESSAGE` : 'TALLYMESSAGE';
+      }
+      if (v.VOUCHER && typeof v.VOUCHER === 'object') {
+        v = v.VOUCHER;
         isWrapped = true;
-        wrapperKey = 'DAYBOOK';
+        wrapperKey = wrapperKey ? `${wrapperKey}.VOUCHER` : 'VOUCHER';
+      } else if (v.voucher && typeof v.voucher === 'object') {
+        v = v.voucher;
+        isWrapped = true;
+        wrapperKey = wrapperKey ? `${wrapperKey}.voucher` : 'voucher';
+      } else if (v.DAYBOOK && typeof v.DAYBOOK === 'object') {
+        v = v.DAYBOOK;
+        isWrapped = true;
+        wrapperKey = wrapperKey ? `${wrapperKey}.DAYBOOK` : 'DAYBOOK';
       }
 
       // Check if object is a candidate voucher object
@@ -430,6 +440,7 @@ export class StreamingJsonParser {
 
     // Stream through the file chunk-by-chunk
     let inString = false;
+    let stringQuoteChar: string | null = null;
     let isEscaped = false;
 
     await new Promise<void>((resolve, reject) => {
@@ -454,13 +465,31 @@ export class StreamingJsonParser {
               colNum++;
             }
 
+            if (byteOffset === 50) {
+              console.log(`[StreamingJsonParser] Exact parser state at byte 50:`, {
+                byteOffset,
+                lineNum,
+                colNum,
+                char,
+                charSnippet: recentCharBuffer.slice(-30),
+                state,
+                arrayDepth,
+                objectDepth,
+                inString,
+                detectedContainerPath,
+                currentPendingKey,
+                keyStack: [...keyStack]
+              });
+            }
+
             // If buffering an item object `{ ... }` at element level
             if (objectDepth > 0) {
               currentObjectChunks.push(char);
 
               if (!inString) {
-                if (char === '"') {
+                if (char === '"' || char === "'") {
                   inString = true;
+                  stringQuoteChar = char;
                   isEscaped = false;
                 } else if (char === '{') {
                   objectDepth++;
@@ -479,8 +508,9 @@ export class StreamingJsonParser {
                   isEscaped = false;
                 } else if (char === '\\') {
                   isEscaped = true;
-                } else if (char === '"') {
+                } else if (char === stringQuoteChar) {
                   inString = false;
+                  stringQuoteChar = null;
                 }
               }
               continue;
@@ -563,8 +593,9 @@ export class StreamingJsonParser {
             // 2. IN_ARRAY STATE: incrementally parse objects `{ ... }` or primitive values in array
             if (state === 'IN_ARRAY') {
               if (!inString) {
-                if (char === '"') {
+                if (char === '"' || char === "'") {
                   inString = true;
+                  stringQuoteChar = char;
                   isEscaped = false;
                 } else if (char === '{') {
                   objectDepth = 1;
@@ -581,11 +612,11 @@ export class StreamingJsonParser {
                       state = 'HEADER';
                     }
                   }
-                } else if (char === ',' || /\s/.test(char)) {
-                  // Standard array value separator or whitespace
+                } else if (char === ',' || char === ':' || char === ';' || /\s/.test(char)) {
+                  // Standard array value separator, colon, semicolon or whitespace
                   continue;
-                } else if (/^[0-9\-+.eE]|true|false|null$/i.test(char)) {
-                  // Standard primitive array token character (numbers, negative numbers, decimals, scientific notation, booleans, null)
+                } else if (/^[a-zA-Z0-9_\-+.]/.test(char)) {
+                  // Standard primitive array token character (numbers, negative numbers, decimals, scientific notation, booleans, null, identifiers)
                   continue;
                 } else {
                   // Genuine JSON syntax error
@@ -597,8 +628,9 @@ export class StreamingJsonParser {
                   isEscaped = false;
                 } else if (char === '\\') {
                   isEscaped = true;
-                } else if (char === '"') {
+                } else if (char === stringQuoteChar) {
                   inString = false;
+                  stringQuoteChar = null;
                 }
               }
               continue;

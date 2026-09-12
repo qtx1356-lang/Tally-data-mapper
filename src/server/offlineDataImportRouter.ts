@@ -243,6 +243,21 @@ offlineDataImportRouter.post('/upload-and-parse', handleUploadMiddleware, async 
     const originalFileName = req.file.originalname || path.basename(uploadedFilePath);
     const fileType: ImportFileFormat = (req.body.fileType as ImportFileFormat) || inferFileType(originalFileName);
 
+    // Inspect and log the first 2048 bytes of the uploaded file
+    try {
+      const sampleBuf = Buffer.alloc(2048);
+      const fd = fs.openSync(uploadedFilePath, 'r');
+      const bytesRead = fs.readSync(fd, sampleBuf, 0, 2048, 0);
+      fs.closeSync(fd);
+      const sampleText = sampleBuf.subarray(0, bytesRead).toString('utf8');
+      console.log(`[OfflineDataImport] RAW FIRST ${bytesRead} BYTES OF UPLOADED FILE (${originalFileName}):\n${sampleText}`);
+      const inspectDir = path.join(process.cwd(), 'data');
+      if (!fs.existsSync(inspectDir)) fs.mkdirSync(inspectDir, { recursive: true });
+      fs.writeFileSync(path.join(inspectDir, 'last_uploaded_raw_header.txt'), sampleText, 'utf8');
+    } catch (e) {
+      console.warn('[OfflineDataImport] Failed to inspect uploaded file header:', e);
+    }
+
     // Create session
     const session = importSessionManager.createSession(originalFileName, fileType, fileSize);
     sessionId = session.sessionId;
