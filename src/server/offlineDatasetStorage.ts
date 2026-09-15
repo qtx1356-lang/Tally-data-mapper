@@ -377,6 +377,18 @@ export class OfflineDatasetStorage {
       return count;
     }
 
+    const memRecord = this.datasetCache.get(datasetId);
+    if (memRecord && memRecord.vouchers) {
+      for (const v of memRecord.vouchers) {
+        count++;
+        const res = onVoucher(v);
+        if (res && typeof (res as any).then === 'function') {
+          await res;
+        }
+      }
+      return count;
+    }
+
     return 0;
   }
 

@@ -21,8 +21,12 @@ export class LocalStorageProvider implements IStorageProvider {
   public readonly modeName = 'local' as const;
   private underlyingStorage: OfflineDatasetStorage;
 
-  constructor(customStorageDir?: string) {
-    this.underlyingStorage = new OfflineDatasetStorage(customStorageDir);
+  constructor(storageOrDir?: string | OfflineDatasetStorage) {
+    if (storageOrDir instanceof OfflineDatasetStorage) {
+      this.underlyingStorage = storageOrDir;
+    } else {
+      this.underlyingStorage = new OfflineDatasetStorage(storageOrDir);
+    }
   }
 
   public async init(): Promise<void> {

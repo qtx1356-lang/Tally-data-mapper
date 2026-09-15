@@ -32,6 +32,7 @@ import {
 import { OfflineDatasetStorage } from './offlineDatasetStorage';
 import { IStorageProvider, ExceptionPaginationResult, VoucherPaginationResult } from './storage/storageTypes';
 import { getStorageProvider } from './storage/storageFactory';
+import { LocalStorageProvider } from './storage/localStorageProvider';
 import {
   AccountingDirection,
   DebitCreditNormalizationInput,
@@ -65,7 +66,7 @@ export class OfflineDataImportEngine {
 
   constructor(customStorageDir?: string) {
     this.storage = new OfflineDatasetStorage(customStorageDir);
-    this.storageProvider = getStorageProvider();
+    this.storageProvider = customStorageDir ? new LocalStorageProvider(this.storage) : getStorageProvider();
     this.ensureDefaultSampleIfEmpty();
   }
 

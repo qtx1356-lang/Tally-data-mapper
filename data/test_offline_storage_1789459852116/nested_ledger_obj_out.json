@@ -1,7 +1,0 @@
-{
-  "vouchers": [
-    {"id":"vch-stream-1","voucherNumber":"VCH-NESTED-001","voucherType":"Sales","date":"2024-07-15","partyLedger":null,"amount":1000,"totalDebit":1000,"totalCredit":1000,"narration":null,"entries":[{"id":"line-stream-1-1","ledgerName":"Customer A","amount":1000,"isDebit":true,"isDeemedPositive":null,"rawAmount":1000,"sourceAmount":1000,"normalizedAmount":1000,"direction":"Debit","ruleApplied":"Explicit isDebit source field resolved to true (Debit)","reviewRequired":false,"traceability":{"sourceFileType":"JSON","sourceFile":"nested_ledger_obj_stream.json","jsonPath":"$.DayBook[0].ALLLEDGERENTRIES.LEDGERENTRIES[0]","sourceField":"Customer A"}},{"id":"line-stream-1-2","ledgerName":"Sales Account","amount":1000,"isDebit":false,"isDeemedPositive":null,"rawAmount":1000,"sourceAmount":1000,"normalizedAmount":1000,"direction":"Credit","ruleApplied":"Explicit isDebit source field resolved to false (Credit)","reviewRequired":false,"traceability":{"sourceFileType":"JSON","sourceFile":"nested_ledger_obj_stream.json","jsonPath":"$.DayBook[0].ALLLEDGERENTRIES.LEDGERENTRIES[1]","sourceField":"Sales Account"}}],"isBalanced":true,"difference":0,"reviewRequired":false,"sourceFile":"nested_ledger_obj_stream.json","datasetId":"","traceability":{"sourceFileType":"JSON","sourceFile":"nested_ledger_obj_stream.json","jsonPath":"$.DayBook[0]","sourceField":"VCH-NESTED-001"}}
-  ],
-  "ledgers": [],
-  "stockItems": []
-}

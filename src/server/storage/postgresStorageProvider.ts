@@ -35,8 +35,7 @@ export class PostgresStorageProvider implements IStorageProvider {
 
   public async init(): Promise<void> {
     if (!this.connectionString) {
-      console.warn('[PostgresStorageProvider] DATABASE_URL is not configured. Postgres provider not initialized.');
-      return;
+      throw new Error('DATABASE_URL environment variable is not configured for PostgreSQL storage provider.');
     }
 
     try {

@@ -1,7 +1,0 @@
-{
-  "vouchers": [
-    {"id":"vch-stream-1","voucherNumber":"VCH-LIT-001","voucherType":"Payment","date":"2024-07-16","partyLedger":null,"amount":2500,"totalDebit":2500,"totalCredit":2500,"narration":null,"entries":[{"id":"line-stream-1-1","ledgerName":"Vendor X","amount":2500,"isDebit":true,"isDeemedPositive":null,"rawAmount":2500,"sourceAmount":2500,"normalizedAmount":2500,"direction":"Debit","ruleApplied":"Explicit isDebit source field resolved to true (Debit)","reviewRequired":false,"traceability":{"sourceFileType":"JSON","sourceFile":"literal_list_stream.json","jsonPath":"$.DayBook[0]['ALLLEDGERENTRIES.LIST'][0]","sourceField":"Vendor X"}},{"id":"line-stream-1-2","ledgerName":"Bank","amount":2500,"isDebit":false,"isDeemedPositive":null,"rawAmount":2500,"sourceAmount":2500,"normalizedAmount":2500,"direction":"Credit","ruleApplied":"Explicit isDebit source field resolved to false (Credit)","reviewRequired":false,"traceability":{"sourceFileType":"JSON","sourceFile":"literal_list_stream.json","jsonPath":"$.DayBook[0]['ALLLEDGERENTRIES.LIST'][1]","sourceField":"Bank"}}],"isBalanced":true,"difference":0,"reviewRequired":false,"sourceFile":"literal_list_stream.json","datasetId":"","traceability":{"sourceFileType":"JSON","sourceFile":"literal_list_stream.json","jsonPath":"$.DayBook[0]","sourceField":"VCH-LIT-001"}}
-  ],
-  "ledgers": [],
-  "stockItems": []
-}

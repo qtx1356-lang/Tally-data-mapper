@@ -6210,6 +6210,10 @@ Last Error: ${httpAvailable ? "None" : (errorMessage || `TallyPrime was not dete
   try {
     await initStorageProvider();
   } catch (e: any) {
+    if (isWebDeployment && process.env.NODE_ENV === "production") {
+      console.error("[EXFIN Fatal] Storage initialization failed in WEB + production mode:", e.message);
+      process.exit(1);
+    }
     console.warn("[EXFIN Startup] Storage initialization note:", e.message);
   }
 

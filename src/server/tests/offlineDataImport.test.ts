@@ -765,7 +765,7 @@ export async function runOfflineDataImportTests(): Promise<{
     // =========================================================================
 
     const testSessionDir = path.join(testStorageDir, 'import_sessions');
-    const sessionManager = new ImportSessionManager(testSessionDir);
+    const sessionManager = new ImportSessionManager(testSessionDir, engine);
 
     // Test 4.1: Streaming JSON Parser processes large array and enforces bounded preview (max 50)
     const streamingTestFilePath = path.join(testStorageDir, 'daybook_streaming_test.json');
@@ -1420,9 +1420,14 @@ export async function runOfflineDataImportTests(): Promise<{
       `Paginated exceptions retrieved successfully: count=${paginatedExceptions.items.length}`
     );
 
-    // =========================================================================
+  } catch (err: any) {
+    results.push({
+      testName: 'General Test Execution',
+      passed: false,
+      message: `Fatal test error: ${err.message}`
+    });
+  } finally {
     // Cleanup temporary test files
-    // =========================================================================
     try {
       if (fs.existsSync(testStorageDir)) {
         fs.rmSync(testStorageDir, { recursive: true, force: true });
@@ -1430,13 +1435,6 @@ export async function runOfflineDataImportTests(): Promise<{
     } catch (cleanErr) {
       console.warn('Test cleanup notice:', cleanErr);
     }
-
-  } catch (err: any) {
-    results.push({
-      testName: 'General Test Execution',
-      passed: false,
-      message: `Fatal test error: ${err.message}`
-    });
   }
 
   const passed = results.filter(r => r.passed).length;

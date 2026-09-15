@@ -77,9 +77,11 @@ export interface ImportSessionMeta {
 export class ImportSessionManager {
   private baseDir: string;
   private inMemoryProgress: Map<string, ImportSessionProgress> = new Map();
+  private engine: OfflineDataImportEngine;
 
-  constructor(customDir?: string) {
+  constructor(customDir?: string, customEngine?: OfflineDataImportEngine) {
     this.baseDir = customDir || path.join(process.cwd(), 'data', 'import_sessions');
+    this.engine = customEngine || offlineDataImportEngine;
     this.ensureDirExists();
     // Run initial cleanup of abandoned sessions on startup
     this.cleanupAbandonedSessions(24 * 60 * 60 * 1000);
@@ -298,7 +300,7 @@ export class ImportSessionManager {
     const preview = this.getSessionPreview(sessionId);
     const sampleVouchers = preview?.sampleRecords || [];
     const sampleRecords = { vouchers: sampleVouchers, ledgers: [], stockItems: [] };
-    const updatedQuality = offlineDataImportEngine.evaluateDataQuality(sampleRecords, mappings);
+    const updatedQuality = this.engine.evaluateDataQuality(sampleRecords, mappings);
 
     fs.writeFileSync(path.join(sessionDir, 'quality.json'), JSON.stringify(updatedQuality, null, 2), 'utf-8');
     return updatedQuality;
@@ -369,7 +371,7 @@ export class ImportSessionManager {
       const rawRecords = JSON.parse(fs.readFileSync(recordsPath, 'utf-8'));
       const mappings = userMappings || this.getSessionMappings(sessionId) || [];
 
-      const savedRecord = offlineDataImportEngine.commitDataset(
+      const savedRecord = this.engine.commitDataset(
         meta.fileName,
         meta.fileType,
         meta.fileSize,
@@ -416,7 +418,7 @@ export class ImportSessionManager {
     },
     userMappings?: FieldMappingItem[]
   ): CanonicalDatasetRecord {
-    const storage = offlineDataImportEngine.getStorage();
+    const storage = this.engine.getStorage();
     const datasetsDir = storage.getDatasetsDir();
     const datasetId = `ds-offline-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
     const targetDatasetDirTmp = path.join(datasetsDir, `${datasetId}.tmp.${Date.now()}`);
@@ -667,7 +669,7 @@ export class ImportSessionManager {
 
       // Register with storage and activate
       storage.saveStreamingDataset(canonicalRecord);
-      const storageProvider = offlineDataImportEngine.getStorageProvider();
+      const storageProvider = this.engine.getStorageProvider();
       if (storageProvider.modeName === 'postgres') {
         storageProvider.saveStreamingDataset(canonicalRecord, targetDatasetDir).catch((pgErr: any) => {
           console.error('[ImportSessionManager] Failed to persist to PostgreSQL:', pgErr.message);
@@ -743,7 +745,7 @@ export class ImportSessionManager {
       return this.commitSession(sessionId, overrides, userMappings);
     }
 
-    const storage = offlineDataImportEngine.getStorage();
+    const storage = this.engine.getStorage();
     const datasetsDir = storage.getDatasetsDir();
     const datasetId = `ds-offline-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
     const targetDatasetDirTmp = path.join(datasetsDir, `${datasetId}.tmp.${Date.now()}`);
@@ -988,7 +990,7 @@ export class ImportSessionManager {
       };
 
       storage.saveStreamingDataset(canonicalRecord);
-      const storageProvider = offlineDataImportEngine.getStorageProvider();
+      const storageProvider = this.engine.getStorageProvider();
       if (storageProvider.modeName === 'postgres') {
         try {
           await storageProvider.saveStreamingDataset(canonicalRecord, targetDatasetDir);

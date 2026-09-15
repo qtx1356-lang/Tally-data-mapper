@@ -1,7 +1,0 @@
-{
-  "vouchers": [
-    {"id":"vch-stream-1","voucherNumber":null,"voucherType":"Sales","date":"2024-08-01","partyLedger":null,"amount":5000,"totalDebit":5000,"totalCredit":5000,"narration":null,"entries":[{"id":"line-stream-1-1","ledgerName":"Debtor Corp","amount":5000,"isDebit":true,"isDeemedPositive":null,"rawAmount":5000,"sourceAmount":5000,"normalizedAmount":5000,"direction":"Debit","ruleApplied":"Explicit isDebit source field resolved to true (Debit)","reviewRequired":false,"traceability":{"sourceFileType":"JSON","sourceFile":"missing_vchnum_stream.json","jsonPath":"$.DayBook[0].entries[0]","sourceField":"Debtor Corp"}},{"id":"line-stream-1-2","ledgerName":"Sales Account","amount":5000,"isDebit":false,"isDeemedPositive":null,"rawAmount":5000,"sourceAmount":5000,"normalizedAmount":5000,"direction":"Credit","ruleApplied":"Explicit isDebit source field resolved to false (Credit)","reviewRequired":false,"traceability":{"sourceFileType":"JSON","sourceFile":"missing_vchnum_stream.json","jsonPath":"$.DayBook[0].entries[1]","sourceField":"Sales Account"}}],"isBalanced":true,"difference":0,"reviewRequired":true,"reviewReasons":["Missing voucher number in source"],"sourceFile":"missing_vchnum_stream.json","datasetId":"","traceability":{"sourceFileType":"JSON","sourceFile":"missing_vchnum_stream.json","jsonPath":"$.DayBook[0]","sourceField":null}}
-  ],
-  "ledgers": [],
-  "stockItems": []
-}
