@@ -1,0 +1,7 @@
+{
+  "vouchers": [
+    {"id":"vch-stream-1","voucherNumber":"NEST-001","voucherType":"Payment","date":"2024-08-10","partyLedger":null,"amount":12000,"totalDebit":12000,"totalCredit":12000,"narration":null,"entries":[{"id":"line-stream-1-1","ledgerName":"Supplier Inc","amount":12000,"isDebit":true,"isDeemedPositive":null,"rawAmount":12000,"sourceAmount":12000,"normalizedAmount":12000,"direction":"Debit","ruleApplied":"Explicit isDebit source field resolved to true (Debit)","reviewRequired":false,"traceability":{"sourceFileType":"JSON","sourceFile":"nested_daybook_stream.json","jsonPath":"$.ENVELOPE.BODY.EXPORTDATA.TALLYMESSAGE.DayBook[0].ALLLEDGERENTRIES.LEDGERENTRIES[0]","sourceField":"Supplier Inc"}},{"id":"line-stream-1-2","ledgerName":"Bank Account","amount":12000,"isDebit":false,"isDeemedPositive":null,"rawAmount":12000,"sourceAmount":12000,"normalizedAmount":12000,"direction":"Credit","ruleApplied":"Explicit isDebit source field resolved to false (Credit)","reviewRequired":false,"traceability":{"sourceFileType":"JSON","sourceFile":"nested_daybook_stream.json","jsonPath":"$.ENVELOPE.BODY.EXPORTDATA.TALLYMESSAGE.DayBook[0].ALLLEDGERENTRIES.LEDGERENTRIES[1]","sourceField":"Bank Account"}}],"isBalanced":true,"difference":0,"reviewRequired":false,"sourceFile":"nested_daybook_stream.json","datasetId":"","traceability":{"sourceFileType":"JSON","sourceFile":"nested_daybook_stream.json","jsonPath":"$.ENVELOPE.BODY.EXPORTDATA.TALLYMESSAGE.DayBook[0]","sourceField":"NEST-001"}}
+  ],
+  "ledgers": [],
+  "stockItems": []
+}

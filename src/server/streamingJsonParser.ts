@@ -611,23 +611,6 @@ export class StreamingJsonParser {
               colNum++;
             }
 
-            if (byteOffset === 50) {
-              console.log(`[StreamingJsonParser] Exact parser state at byte 50:`, {
-                byteOffset,
-                lineNum,
-                colNum,
-                char,
-                charSnippet: recentCharBuffer.slice(-30),
-                state,
-                arrayDepth,
-                objectDepth,
-                inString,
-                detectedContainerPath,
-                currentPendingKey,
-                keyStack: [...keyStack]
-              });
-            }
-
             // If buffering an item object `{ ... }` at element level
             if (objectDepth > 0) {
               currentObjectChunks.push(char);
@@ -790,7 +773,7 @@ export class StreamingJsonParser {
       });
 
       readStream.on('end', () => {
-        if (objectDepth > 0 || inString) {
+        if (objectDepth > 0 || inString || (state === 'IN_ARRAY' && arrayDepth > 0)) {
           return reject(new Error(`Invalid JSON in ${fileName} (phase: Processing) at byte ${byteOffset}, line ${lineNum}, column ${colNum}, path ${detectedContainerPath}: unexpected end of stream with unclosed syntax`));
         }
         if (totalVouchers === 0 && state === 'HEADER') {

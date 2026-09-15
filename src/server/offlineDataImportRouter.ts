@@ -19,6 +19,18 @@ try {
   console.warn('[OfflineDataImport] Could not create local temp upload dir, falling back to os.tmpdir()', e);
 }
 
+// Concurrency control for resource-intensive imports (Fix #16)
+let activeImportsCount = 0;
+const MAX_CONCURRENT_IMPORTS = 2;
+
+// Filename sanitizer to prevent directory traversal and null-byte injection (Fix #11)
+export function sanitizeUploadedFilename(name: string): string {
+  if (!name || typeof name !== 'string') return 'upload';
+  const noNulls = name.replace(/\0/g, '').trim();
+  const base = path.basename(noNulls).replace(/[/\\?%*:|"<>]/g, '_');
+  return base.replace(/\.\.+/g, '.').trim() || 'upload';
+}
+
 // Configure multer for disk-based streaming uploads up to 500MB
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
@@ -30,7 +42,8 @@ const storage = multer.diskStorage({
   },
   filename: (req, file, cb) => {
     const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1e9);
-    const ext = path.extname(file.originalname);
+    const safeBase = sanitizeUploadedFilename(file.originalname);
+    const ext = path.extname(safeBase) || '.dat';
     cb(null, `tally_import_${uniqueSuffix}${ext}`);
   }
 });
@@ -39,6 +52,12 @@ const upload = multer({
   storage,
   limits: {
     fileSize: 500 * 1024 * 1024 // 500 MB limit
+  },
+  fileFilter: (req, file, cb) => {
+    if (file.originalname.includes('\0') || file.originalname.includes('..') || file.originalname.includes('/') || file.originalname.includes('\\')) {
+      return cb(new Error('Invalid filename containing path traversal characters'));
+    }
+    cb(null, true);
   }
 });
 
@@ -142,59 +161,65 @@ offlineDataImportRouter.get('/datasets/:id/vouchers', async (req: Request, res: 
     const datasetId = req.params.id;
     const page = parseInt(req.query.page as string || '1', 10);
     const limit = Math.min(parseInt(req.query.limit as string || '50', 10), 500);
-    const search = ((req.query.search as string) || '').toLowerCase().trim();
-    const typeFilter = ((req.query.voucherType as string) || '').toLowerCase().trim();
+    const search = ((req.query.search as string) || '').trim();
+    const voucherType = ((req.query.voucherType as string) || '').trim();
 
-    const startIdx = (page - 1) * limit;
-    const items: any[] = [];
-    let totalCount = 0;
-    let matchedCount = 0;
-
-    await offlineDataImportEngine.streamVouchers(datasetId, (v) => {
-      totalCount++;
-      let matches = true;
-      if (typeFilter && (v.voucherType || '').toLowerCase() !== typeFilter) {
-        matches = false;
-      }
-      if (matches && search) {
-        const str = `${v.voucherNumber || ''} ${v.partyLedger || ''} ${v.narration || ''} ${v.amount || ''}`.toLowerCase();
-        if (!str.includes(search)) {
-          matches = false;
-        }
-      }
-
-      if (matches) {
-        if (matchedCount >= startIdx && items.length < limit) {
-          items.push(v);
-        }
-        matchedCount++;
-      }
+    const result = await offlineDataImportEngine.getVouchersPaginated(datasetId, page, limit, {
+      search,
+      voucherType
     });
 
     res.json({
       success: true,
       datasetId,
-      page,
-      limit,
-      totalVouchers: totalCount,
-      matchedVouchers: matchedCount,
-      totalPages: Math.ceil(matchedCount / limit) || 1,
-      vouchers: items
+      page: result.page,
+      limit: result.limit,
+      totalVouchers: result.total,
+      matchedVouchers: result.matchedCount ?? result.total,
+      totalPages: result.totalPages,
+      vouchers: result.items,
+      data: result.items,
+      pagination: {
+        page: result.page,
+        limit: result.limit,
+        total: result.total,
+        totalPages: result.totalPages
+      }
     });
   } catch (err: any) {
     res.status(500).json({ success: false, error: err.message, code: 'IMPORT_ERROR' });
   }
 });
 
-// 5b. Get exceptions for a dataset (supporting both streaming and in-memory datasets)
+// 5b. Get exceptions for a dataset with bounded pagination (Fix #3)
 offlineDataImportRouter.get('/datasets/:id/exceptions', async (req: Request, res: Response) => {
   try {
     const datasetId = req.params.id;
-    const exceptions: any[] = [];
-    await offlineDataImportEngine.streamExceptions(datasetId, (exc) => {
-      exceptions.push(exc);
+    const page = Math.max(1, parseInt(req.query.page as string || '1', 10));
+    const limit = Math.min(Math.max(1, parseInt(req.query.limit as string || '50', 10)), 500);
+    const search = req.query.search as string | undefined;
+    const severity = req.query.severity as string | undefined;
+    const type = req.query.type as string | undefined;
+
+    const result = await offlineDataImportEngine.getExceptionsPaginated(datasetId, page, limit, {
+      search,
+      severity,
+      type
     });
-    res.json({ success: true, datasetId, count: exceptions.length, exceptions });
+
+    res.json({
+      success: true,
+      datasetId,
+      data: result.items,
+      exceptions: result.items,
+      count: result.items.length,
+      pagination: {
+        page: result.page,
+        limit: result.limit,
+        total: result.total,
+        totalPages: result.totalPages
+      }
+    });
   } catch (err: any) {
     res.status(500).json({ success: false, error: err.message, code: 'IMPORT_ERROR' });
   }
@@ -229,6 +254,20 @@ offlineDataImportRouter.post('/upload-and-parse', handleUploadMiddleware, async 
   let uploadedFilePath: string | null = null;
   let sessionId: string | null = null;
 
+  if (activeImportsCount >= MAX_CONCURRENT_IMPORTS) {
+    if (req.file?.path && fs.existsSync(req.file.path)) {
+      try { fs.unlinkSync(req.file.path); } catch (e) {}
+    }
+    res.setHeader('Retry-After', '30');
+    return res.status(429).json({
+      success: false,
+      error: 'The server is currently processing the maximum number of concurrent large file imports (2). Please retry shortly.',
+      code: 'CONCURRENT_IMPORT_LIMIT_EXCEEDED'
+    });
+  }
+
+  activeImportsCount++;
+
   try {
     if (!req.file) {
       return res.status(400).json({
@@ -240,23 +279,11 @@ offlineDataImportRouter.post('/upload-and-parse', handleUploadMiddleware, async 
 
     uploadedFilePath = req.file.path;
     const fileSize = req.file.size;
-    const originalFileName = req.file.originalname || path.basename(uploadedFilePath);
+    const originalFileName = sanitizeUploadedFilename(req.file.originalname || path.basename(uploadedFilePath));
     const fileType: ImportFileFormat = (req.body.fileType as ImportFileFormat) || inferFileType(originalFileName);
 
-    // Inspect and log the first 2048 bytes of the uploaded file
-    try {
-      const sampleBuf = Buffer.alloc(2048);
-      const fd = fs.openSync(uploadedFilePath, 'r');
-      const bytesRead = fs.readSync(fd, sampleBuf, 0, 2048, 0);
-      fs.closeSync(fd);
-      const sampleText = sampleBuf.subarray(0, bytesRead).toString('utf8');
-      console.log(`[OfflineDataImport] RAW FIRST ${bytesRead} BYTES OF UPLOADED FILE (${originalFileName}):\n${sampleText}`);
-      const inspectDir = path.join(process.cwd(), 'data');
-      if (!fs.existsSync(inspectDir)) fs.mkdirSync(inspectDir, { recursive: true });
-      fs.writeFileSync(path.join(inspectDir, 'last_uploaded_raw_header.txt'), sampleText, 'utf8');
-    } catch (e) {
-      console.warn('[OfflineDataImport] Failed to inspect uploaded file header:', e);
-    }
+    // Safe operational metadata logging (no confidential file content or headers)
+    console.log(`[OfflineDataImport] Upload received: ${originalFileName} (${fileSize} bytes, detected format: ${fileType})`);
 
     // Create session
     const session = importSessionManager.createSession(originalFileName, fileType, fileSize);
@@ -367,6 +394,7 @@ offlineDataImportRouter.post('/upload-and-parse', handleUploadMiddleware, async 
       code: isMalformed ? 'INVALID_TALLY_DATA' : 'INVALID_REQUEST'
     });
   } finally {
+    activeImportsCount = Math.max(0, activeImportsCount - 1);
     // Clean up temporary upload file immediately
     if (uploadedFilePath && fs.existsSync(uploadedFilePath)) {
       try {
@@ -383,12 +411,26 @@ offlineDataImportRouter.post('/parse', handleUploadMiddleware, async (req: Reque
   let uploadedFilePath: string | null = null;
   let sessionId: string | null = null;
 
+  if (activeImportsCount >= MAX_CONCURRENT_IMPORTS) {
+    if (req.file?.path && fs.existsSync(req.file.path)) {
+      try { fs.unlinkSync(req.file.path); } catch (e) {}
+    }
+    res.setHeader('Retry-After', '30');
+    return res.status(429).json({
+      success: false,
+      error: 'The server is currently processing the maximum number of concurrent large file imports (2). Please retry shortly.',
+      code: 'CONCURRENT_IMPORT_LIMIT_EXCEEDED'
+    });
+  }
+
+  activeImportsCount++;
+
   try {
     // Case A: Multipart upload
     if (req.file) {
       uploadedFilePath = req.file.path;
       const fileSize = req.file.size;
-      const originalFileName = req.file.originalname || path.basename(uploadedFilePath);
+      const originalFileName = sanitizeUploadedFilename(req.file.originalname || path.basename(uploadedFilePath));
       const fileType: ImportFileFormat = (req.body.fileType as ImportFileFormat) || inferFileType(originalFileName);
 
       const session = importSessionManager.createSession(originalFileName, fileType, fileSize);
@@ -517,6 +559,7 @@ offlineDataImportRouter.post('/parse', handleUploadMiddleware, async (req: Reque
       code: isMalformed ? 'INVALID_TALLY_DATA' : 'INVALID_REQUEST'
     });
   } finally {
+    activeImportsCount = Math.max(0, activeImportsCount - 1);
     if (uploadedFilePath && fs.existsSync(uploadedFilePath)) {
       try {
         fs.unlinkSync(uploadedFilePath);

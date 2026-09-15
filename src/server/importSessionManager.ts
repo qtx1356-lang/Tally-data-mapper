@@ -667,6 +667,12 @@ export class ImportSessionManager {
 
       // Register with storage and activate
       storage.saveStreamingDataset(canonicalRecord);
+      const storageProvider = offlineDataImportEngine.getStorageProvider();
+      if (storageProvider.modeName === 'postgres') {
+        storageProvider.saveStreamingDataset(canonicalRecord, targetDatasetDir).catch((pgErr: any) => {
+          console.error('[ImportSessionManager] Failed to persist to PostgreSQL:', pgErr.message);
+        });
+      }
 
       meta.status = 'COMMITTED';
       meta.updatedAt = new Date().toISOString();
@@ -982,6 +988,14 @@ export class ImportSessionManager {
       };
 
       storage.saveStreamingDataset(canonicalRecord);
+      const storageProvider = offlineDataImportEngine.getStorageProvider();
+      if (storageProvider.modeName === 'postgres') {
+        try {
+          await storageProvider.saveStreamingDataset(canonicalRecord, targetDatasetDir);
+        } catch (pgErr: any) {
+          console.error('[ImportSessionManager] Failed to persist to PostgreSQL:', pgErr.message);
+        }
+      }
 
       meta.status = 'COMMITTED';
       meta.updatedAt = new Date().toISOString();

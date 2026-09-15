@@ -1,0 +1,1 @@
+{"DayBook":[{"voucherNumber":"VCH-NESTED-001","voucherType":"Sales","date":"2024-07-15","ALLLEDGERENTRIES":{"LEDGERENTRIES":[{"ledgerName":"Customer A","isDebit":true,"amount":1000},{"ledgerName":"Sales Account","isDebit":false,"amount":1000}]}}]}

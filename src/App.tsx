@@ -268,6 +268,7 @@ export default function App() {
   const [dataSourceMode, setDataSourceMode] = useState<'LIVE_TALLY' | 'OFFLINE_DATASET'>('OFFLINE_DATASET');
   const [activeOfflineDataset, setActiveOfflineDataset] = useState<any>(null);
   const [offlineDatasets, setOfflineDatasets] = useState<any[]>([]);
+  const [deploymentMode, setDeploymentMode] = useState<'web' | 'desktop'>('web');
 
   // Settings State
   const [settings, setSettings] = useState<AppSettings>({
@@ -325,6 +326,15 @@ export default function App() {
 
         if (data.autoConnect) {
           testConnection(data.tallyHost, data.tallyPort, data.connectionTimeoutSeconds, true);
+        }
+      })
+      .catch(() => {});
+
+    fetch('/api/system/deployment-info')
+      .then((res) => res.json())
+      .then((info) => {
+        if (info.mode) {
+          setDeploymentMode(info.mode);
         }
       })
       .catch(() => {});
@@ -634,9 +644,18 @@ export default function App() {
             EX
           </div>
           <div className="flex flex-col">
-            <span className="font-bold text-sm text-slate-100 tracking-wide leading-none">
-              EXFIN Tally Audit Platform
-            </span>
+            <div className="flex items-center space-x-2">
+              <span className="font-bold text-sm text-slate-100 tracking-wide leading-none">
+                EXFIN Tally Audit Platform
+              </span>
+              <span className={`text-[9px] px-1.5 py-0.5 rounded font-mono font-bold uppercase tracking-wider ${
+                deploymentMode === 'web'
+                  ? 'bg-sky-950/80 text-sky-400 border border-sky-800/60'
+                  : 'bg-emerald-950/80 text-emerald-400 border border-emerald-800/60'
+              }`}>
+                {deploymentMode === 'web' ? 'Web Mode' : 'Desktop'}
+              </span>
+            </div>
             <span className="text-[9px] text-slate-500 font-medium uppercase tracking-widest mt-0.5">
               Financial Intelligence & Compliance
             </span>

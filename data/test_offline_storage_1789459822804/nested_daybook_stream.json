@@ -1,0 +1,1 @@
+{"ENVELOPE":{"BODY":{"EXPORTDATA":{"TALLYMESSAGE":{"DayBook":[{"voucherNumber":"NEST-001","voucherType":"Payment","date":"2024-08-10","ALLLEDGERENTRIES":{"LEDGERENTRIES":[{"ledgerName":"Supplier Inc","isDebit":true,"amount":12000},{"ledgerName":"Bank Account","isDebit":false,"amount":12000}]}}]}}}}}

@@ -110,11 +110,21 @@ The web backend exposes standard production health endpoints:
 | `HOST` | `0.0.0.0` | Bind host for HTTP ingress. |
 | `NODE_ENV` | `production` | Runtimes switch: development uses Vite dev middleware; production serves compiled `dist/`. |
 | `EXFIN_MODE` | `web` | Operational mode (`web` or `desktop`). |
+| `DATABASE_URL` | *(Optional)* | PostgreSQL connection string for Web Mode persistent storage (`postgres://user:pass@host:5432/db`). If omitted, local disk storage (`data/offline_datasets`) is used. |
+| `STORAGE_MODE` | `auto` | Storage driver selection: `auto`, `postgres`, or `local`. In `auto` mode with `EXFIN_MODE=web` and `DATABASE_URL` set, PostgreSQL is used. |
+| `TALLY_BRIDGE_URL` | *(Optional)* | Explicit authorized bridge URL if bridging Tally through a secure gateway in Web Mode. |
 | `GEMINI_API_KEY` | *(Optional)* | Server-side API key for Gemini AI Audit Copilot. |
 
 ---
 
-## 5. Build & Execution Commands
+## 5. Persistent Storage & Cloud Database
+
+- **Local Storage Provider (Desktop / Single-Node)**: Saves imported datasets, JSON summaries, and streaming NDJSON lines under `./data/offline_datasets`.
+- **PostgreSQL Storage Provider (Web Cloud / Multi-Node)**: Configured via `DATABASE_URL`. Stores dataset metadata, aggregates, vouchers, lines, and exceptions in PostgreSQL tables (`exfin_datasets`, `exfin_vouchers`, `exfin_exceptions`), allowing horizontal scaling across multiple container instances.
+
+---
+
+## 6. Build & Execution Commands
 
 ### Cloud Web Mode
 ```bash
@@ -126,6 +136,12 @@ npm start
 # or explicitly:
 npm run start:web
 ```
+
+### Render Deployment
+The repository includes a ready-to-deploy `render.yaml` specification creating:
+- A Node Web Service running `npm run build` and `npm start`
+- An integrated PostgreSQL database (`exfin-postgres`) providing persistent `DATABASE_URL` storage
+- Automatic zero-downtime deploys and healthcheck on `/api/health`
 
 ### Docker Container Deployment
 ```bash

@@ -50,6 +50,8 @@ import { phase33Router } from "./src/server/phase33Router";
 import { phase33aRouter } from "./src/server/phase33aRouter";
 import { offlineDataImportRouter } from "./src/server/offlineDataImportRouter";
 import { webDeploymentConfig } from "./src/server/webDeploymentConfig";
+import { initStorageProvider, resolveStorageMode } from "./src/server/storage/storageFactory";
+import { importSessionManager } from "./src/server/importSessionManager";
 
 async function startServer() {
   const app = express();
@@ -65,6 +67,16 @@ async function startServer() {
     (process.versions as any)?.electron
   );
   const EXFIN_MODE = isElectron ? "desktop" : (process.env.EXFIN_MODE || "web");
+  const isWebDeployment = EXFIN_MODE === "web";
+
+  // Production Security Headers (Fix #15)
+  app.use((req, res, next) => {
+    res.setHeader("X-Content-Type-Options", "nosniff");
+    res.setHeader("X-Frame-Options", "SAMEORIGIN");
+    res.setHeader("Referrer-Policy", "strict-origin-when-cross-origin");
+    res.setHeader("X-XSS-Protection", "1; mode=block");
+    next();
+  });
 
   app.use(express.json({ limit: "100mb" }));
   app.use(express.urlencoded({ limit: "100mb", extended: true }));
@@ -89,6 +101,10 @@ async function startServer() {
   // Offline Data Import & Dataset API
   app.use("/api/import", offlineDataImportRouter);
   app.use("/api/offline-dataset", offlineDataImportRouter);
+  app.use("/api/datasets", (req, res, next) => {
+    req.url = '/datasets' + req.url;
+    offlineDataImportRouter(req, res, next);
+  });
 
   // Phase 32X - Multi-Company Consolidation & Group Reporting
   app.use("/api/phase32x", phase32xRouter);
@@ -249,7 +265,7 @@ async function startServer() {
   // Phase 13 - Enterprise Administration & Central Cloud Licensing API (Versioned /api/v1)
   app.use("/api/v1", centralApiRouter);
 
-  // SSRF Protection Helper for web deployment
+  // SSRF Protection Helper for web deployment (Fix #5)
   const isDisallowedHost = (h: string): boolean => {
     if (!h || typeof h !== "string") return true;
     const lower = h.trim().toLowerCase();
@@ -257,9 +273,50 @@ async function startServer() {
       lower.startsWith("169.254.") ||
       lower.includes("metadata.google") ||
       lower.includes("metadata.internal") ||
+      lower.includes("100.100.100.200") ||
       lower === "0.0.0.0" ||
-      lower === "::"
+      lower === "::" ||
+      (isWebDeployment && (
+        lower === "localhost" ||
+        lower === "127.0.0.1" ||
+        lower.startsWith("127.") ||
+        lower === "::1" ||
+        lower.startsWith("10.") ||
+        lower.startsWith("192.168.") ||
+        lower.startsWith("172.16.") ||
+        lower.startsWith("172.17.") ||
+        lower.startsWith("172.18.") ||
+        lower.startsWith("172.19.") ||
+        lower.startsWith("172.2") ||
+        lower.startsWith("172.30.") ||
+        lower.startsWith("172.31.") ||
+        lower.startsWith("100.64.")
+      ))
     );
+  };
+
+  // Web Mode Tally Connection Safety (Fix #4)
+  const checkWebModeTallySafety = (targetHost: string, targetPort: number): { allowed: boolean; reason?: string } => {
+    if (!isWebDeployment) {
+      return { allowed: true };
+    }
+
+    const bridgeUrl = process.env.TALLY_BRIDGE_URL;
+    if (bridgeUrl) {
+      try {
+        const parsed = new URL(bridgeUrl);
+        const bridgeHost = parsed.hostname.toLowerCase();
+        const bridgePort = parsed.port ? Number(parsed.port) : (parsed.protocol === "https:" ? 443 : 80);
+        if (targetHost.toLowerCase() === bridgeHost && targetPort === bridgePort) {
+          return { allowed: true };
+        }
+      } catch (e) {}
+    }
+
+    return {
+      allowed: false,
+      reason: "Direct TallyPrime LAN connections are not supported in Web Deployment mode. Please use Offline Import (XML, JSON, Excel) or deploy EXFIN Desktop for live TallyPrime synchronization."
+    };
   };
 
   // Helper for comprehensive production health and diagnostic state
@@ -270,6 +327,7 @@ async function startServer() {
       app: "EXFIN Tally Audit Platform",
       version: "1.0.1",
       mode: EXFIN_MODE,
+      storageMode: resolveStorageMode(),
       environment: process.env.NODE_ENV || "development",
       server: {
         port: PORT,
@@ -367,20 +425,6 @@ async function startServer() {
       });
     }
 
-    if (isDisallowedHost(host)) {
-      return res.json({
-        success: false,
-        status: "Failed",
-        errorCode: "SECURITY_VIOLATION",
-        errorMessage: "The requested host target is restricted for security (SSRF prevention).",
-        technicalDetails: `Target host '${host}' is blocked by cloud web deployment security policy.`,
-        responseTimeMs: 0,
-        protocol: "HTTP",
-        testedAt: checkedAt,
-        rawPreview: ""
-      });
-    }
-
     const portNum = Number(port);
     if (isNaN(portNum) || portNum < 1 || portNum > 65535) {
       return res.json({
@@ -389,6 +433,35 @@ async function startServer() {
         errorCode: "INVALID_PORT",
         errorMessage: "Enter a valid port between 1 and 65535.",
         technicalDetails: `Invalid port value: ${port}`,
+        responseTimeMs: 0,
+        protocol: "HTTP",
+        testedAt: checkedAt,
+        rawPreview: ""
+      });
+    }
+
+    const safetyCheck = checkWebModeTallySafety(host, portNum);
+    if (!safetyCheck.allowed) {
+      return res.json({
+        success: false,
+        status: "Failed",
+        errorCode: "WEB_MODE_RESTRICTION",
+        errorMessage: safetyCheck.reason,
+        technicalDetails: "Direct socket/HTTP connections to local network addresses are disabled in cloud web deployments to protect private networks.",
+        responseTimeMs: 0,
+        protocol: "HTTP",
+        testedAt: checkedAt,
+        rawPreview: ""
+      });
+    }
+
+    if (isDisallowedHost(host)) {
+      return res.json({
+        success: false,
+        status: "Failed",
+        errorCode: "SECURITY_VIOLATION",
+        errorMessage: "The requested host target is restricted for security (SSRF prevention).",
+        technicalDetails: `Target host '${host}' is blocked by cloud web deployment security policy.`,
         responseTimeMs: 0,
         protocol: "HTTP",
         testedAt: checkedAt,
@@ -544,6 +617,16 @@ async function startServer() {
   app.post("/api/tally/companies", async (req, res) => {
     const { host = "localhost", port = 9000, timeoutSeconds = 10 } = req.body;
 
+    const safetyCheck = checkWebModeTallySafety(host, Number(port));
+    if (!safetyCheck.allowed) {
+      return res.json({
+        success: false,
+        companies: [],
+        error: safetyCheck.reason,
+        code: "WEB_MODE_RESTRICTION"
+      });
+    }
+
     if (isDisallowedHost(host)) {
       return res.json({
         success: false,
@@ -656,6 +739,40 @@ async function startServer() {
   app.post("/api/diagnostics/test", async (req, res) => {
     const { host = "localhost", port = 9000, timeoutSeconds = 10 } = req.body;
     const checkedAt = new Date().toISOString();
+
+    const safetyCheck = checkWebModeTallySafety(host, Number(port));
+    if (!safetyCheck.allowed) {
+      return res.json({
+        success: false,
+        resolvedIp: "N/A",
+        httpAvailable: false,
+        tallyDetected: false,
+        currentCompany: "None",
+        responseTimeMs: 0,
+        testedHost: host,
+        testedPort: Number(port),
+        testedProtocol: "HTTP / XML (Default)",
+        testedAt: checkedAt,
+        rawOutput: safetyCheck.reason
+      });
+    }
+
+    if (isDisallowedHost(host)) {
+      return res.json({
+        success: false,
+        resolvedIp: "N/A",
+        httpAvailable: false,
+        tallyDetected: false,
+        currentCompany: "None",
+        responseTimeMs: 0,
+        testedHost: host,
+        testedPort: Number(port),
+        testedProtocol: "HTTP / XML (Default)",
+        testedAt: checkedAt,
+        rawOutput: "Target host is prohibited by cloud security policy (SSRF prevention)."
+      });
+    }
+
     const targetHost = host === "localhost" ? "127.0.0.1" : host;
 
     const requestXml = `<ENVELOPE>
@@ -6020,6 +6137,16 @@ Last Error: ${httpAvailable ? "None" : (errorMessage || `TallyPrime was not dete
   });
 
 
+  // Global API error handler ensuring all /api/* errors return standard JSON (Fix #14)
+  app.use("/api", (err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
+    console.error(`[EXFIN API Error] ${req.method} ${req.path}:`, err?.message || err);
+    res.status(err?.status || err?.statusCode || 500).json({
+      success: false,
+      error: err?.message || "Internal server error occurred while processing API request.",
+      code: err?.code || "INTERNAL_API_ERROR"
+    });
+  });
+
   // Vite Middleware in dev mode
   if (process.env.NODE_ENV !== "production") {
     const vite = await createViteServer({
@@ -6057,6 +6184,40 @@ Last Error: ${httpAvailable ? "None" : (errorMessage || `TallyPrime was not dete
         res.status(404).send("EXFIN Critical Error: Frontend assets (index.html) missing from distribution. Please run 'npm run build'.");
       }
     });
+  }
+
+  // Ensure required directories exist on startup (Fix #9 & Fix #10)
+  const uploadDir = path.join(process.cwd(), "data", "uploads");
+  const datasetsDir = path.join(process.cwd(), "data", "offline_datasets");
+  const sessionsDir = path.join(process.cwd(), "data", "import_sessions");
+  [uploadDir, datasetsDir, sessionsDir].forEach((dir) => {
+    try {
+      if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+    } catch (e) {}
+  });
+
+  // Clean abandoned temporary sessions on startup and periodically (Fix #10)
+  try {
+    importSessionManager.cleanupAbandonedSessions(3600 * 1000); // 1 hr threshold
+  } catch (e) {}
+  setInterval(() => {
+    try {
+      importSessionManager.cleanupAbandonedSessions(3600 * 1000);
+    } catch (e) {}
+  }, 30 * 60 * 1000).unref();
+
+  // Initialize storage provider (PostgreSQL in Web Mode if configured, else local storage) (Fix #1)
+  try {
+    await initStorageProvider();
+  } catch (e: any) {
+    console.warn("[EXFIN Startup] Storage initialization note:", e.message);
+  }
+
+  // Log startup configuration and validate (Fix #9)
+  const activeStorageMode = resolveStorageMode();
+  console.log(`[EXFIN Startup] Mode: ${EXFIN_MODE.toUpperCase()} | Storage: ${activeStorageMode.toUpperCase()} | Port: ${PORT} | Host: ${HOST} | Node: ${process.version}`);
+  if (isWebDeployment && activeStorageMode !== "postgres") {
+    console.warn("[EXFIN Web Notice] Running in Web Mode with local filesystem storage. For multi-instance horizontal scaling, configure DATABASE_URL.");
   }
 
   app.listen(PORT, HOST, () => {

@@ -1,0 +1,490 @@
+{
+  "id": "ds-offline-1789459823078-xrvg3",
+  "metadata": {
+    "id": "ds-offline-1789459823078-xrvg3",
+    "name": "Target Real Client Without FY (JSON)",
+    "description": "Imported from real_client_import.json with 1 vouchers and 0 masters.",
+    "sourceFileName": "real_client_import.json",
+    "sourceFileType": "JSON",
+    "sourceFileSize": 272,
+    "companyName": "Target Real Client Without FY",
+    "financialYearFrom": null,
+    "financialYearTo": null,
+    "isFinancialYearDetected": false,
+    "financialYearStatus": "REVIEW_REQUIRED",
+    "financialYearExplanation": "Financial year was not detected in the source data.",
+    "financialYearDetectionSource": "Not Detected in Source Data",
+    "importedAt": "2026-09-15T08:10:23.078Z",
+    "totalRecords": 1,
+    "masterCounts": {
+      "ledgers": 0,
+      "groups": 0,
+      "parties": 0,
+      "stockItems": 0,
+      "costCentres": 0,
+      "bankAccounts": 0
+    },
+    "voucherCounts": {
+      "total": 1,
+      "sales": 0,
+      "purchase": 0,
+      "payment": 0,
+      "receipt": 0,
+      "journal": 1,
+      "contra": 0,
+      "other": 0
+    },
+    "dataQualityScore": 88,
+    "dataQualityReport": {
+      "score": 88,
+      "totalRecordsChecked": 1,
+      "passedRecords": 1,
+      "duplicateVouchers": 0,
+      "missingDates": 0,
+      "invalidAmounts": 0,
+      "unbalancedVouchers": 0,
+      "orphanLedgers": 0,
+      "unmappedFieldsCount": 0,
+      "reviewRequiredFieldsCount": 8,
+      "warnings": [
+        "8 fields require mapping confirmation or manual review."
+      ],
+      "errors": [],
+      "recommendations": []
+    },
+    "status": "Ready",
+    "mappingsCount": {
+      "total": 13,
+      "mapped": 5,
+      "reviewRequired": 8,
+      "unmapped": 0
+    },
+    "isActive": true,
+    "isDemoData": false
+  },
+  "companies": [
+    {
+      "name": "Target Real Client Without FY",
+      "financialYearFrom": null,
+      "financialYearTo": null,
+      "id": "ds-offline-1789459823078-xrvg3"
+    }
+  ],
+  "groups": [],
+  "ledgers": [],
+  "parties": [],
+  "vouchers": [
+    {
+      "id": "JSON-V-1",
+      "voucherNumber": "REAL-01",
+      "voucherType": "Journal",
+      "date": "2021-12-10",
+      "partyLedger": "Machinery",
+      "amount": 50000,
+      "totalDebit": 50000,
+      "totalCredit": 50000,
+      "difference": 0,
+      "isBalanced": true,
+      "narration": null,
+      "entries": [
+        {
+          "id": "line-json-1-1",
+          "ledgerName": "Machinery",
+          "amount": 50000,
+          "isDebit": true,
+          "isDeemedPositive": null,
+          "rawAmount": 50000,
+          "sourceAmount": 50000,
+          "normalizedAmount": 50000,
+          "direction": "Debit",
+          "ruleApplied": "Explicit isDebit source field resolved to true (Debit)",
+          "reviewRequired": false,
+          "traceability": {
+            "sourceFileType": "JSON",
+            "sourceFile": "real_client_import.json",
+            "jsonPath": "$.vouchers[0].entries[0]",
+            "sourceField": "Machinery"
+          }
+        },
+        {
+          "id": "line-json-1-2",
+          "ledgerName": "Vendor Beta",
+          "amount": 50000,
+          "isDebit": false,
+          "isDeemedPositive": null,
+          "rawAmount": 50000,
+          "sourceAmount": 50000,
+          "normalizedAmount": 50000,
+          "direction": "Credit",
+          "ruleApplied": "Explicit isDebit source field resolved to false (Credit)",
+          "reviewRequired": false,
+          "traceability": {
+            "sourceFileType": "JSON",
+            "sourceFile": "real_client_import.json",
+            "jsonPath": "$.vouchers[0].entries[1]",
+            "sourceField": "Vendor Beta"
+          }
+        }
+      ],
+      "reviewRequired": false,
+      "reviewReasons": [],
+      "sourceFile": "real_client_import.json",
+      "datasetId": "ds-offline-1789459823078-xrvg3",
+      "traceability": {
+        "sourceFileType": "JSON",
+        "sourceFile": "real_client_import.json",
+        "jsonPath": "$.vouchers[0]",
+        "sourceField": "REAL-01"
+      }
+    }
+  ],
+  "voucherLines": [
+    {
+      "id": "line-json-1-1",
+      "ledgerName": "Machinery",
+      "amount": 50000,
+      "isDebit": true,
+      "isDeemedPositive": null,
+      "rawAmount": 50000,
+      "sourceAmount": 50000,
+      "normalizedAmount": 50000,
+      "direction": "Debit",
+      "ruleApplied": "Explicit isDebit source field resolved to true (Debit)",
+      "reviewRequired": false,
+      "traceability": {
+        "sourceFileType": "JSON",
+        "sourceFile": "real_client_import.json",
+        "jsonPath": "$.vouchers[0].entries[0]",
+        "sourceField": "Machinery"
+      }
+    },
+    {
+      "id": "line-json-1-2",
+      "ledgerName": "Vendor Beta",
+      "amount": 50000,
+      "isDebit": false,
+      "isDeemedPositive": null,
+      "rawAmount": 50000,
+      "sourceAmount": 50000,
+      "normalizedAmount": 50000,
+      "direction": "Credit",
+      "ruleApplied": "Explicit isDebit source field resolved to false (Credit)",
+      "reviewRequired": false,
+      "traceability": {
+        "sourceFileType": "JSON",
+        "sourceFile": "real_client_import.json",
+        "jsonPath": "$.vouchers[0].entries[1]",
+        "sourceField": "Vendor Beta"
+      }
+    }
+  ],
+  "stockItems": [],
+  "costCentres": [],
+  "taxRecords": [],
+  "bankAccounts": [],
+  "exceptions": [
+    {
+      "id": "EXC-ds-offline-1789459823078-xrvg3-1",
+      "risk": "MEDIUM",
+      "riskScore": 65,
+      "date": "2021-12-10",
+      "voucherNo": "REAL-01",
+      "voucherType": "Journal",
+      "ledger": "Machinery",
+      "party": "Machinery",
+      "amount": 50000,
+      "exceptionType": "Unusual Pattern - Round Sum",
+      "reason": "Unusual round sum transaction amount of ₹50,000; review against supporting purchase or service documentation.",
+      "status": "Pending",
+      "traceability": {
+        "sourceFileType": "JSON",
+        "sourceFile": "real_client_import.json",
+        "jsonPath": "$.vouchers[0]",
+        "sourceField": "REAL-01"
+      }
+    }
+  ],
+  "mappings": [
+    {
+      "id": "map-voucher-id",
+      "sourceField": "id",
+      "sourcePath": "Voucher.id",
+      "sourceEntity": "Voucher",
+      "canonicalEntity": "Voucher",
+      "canonicalField": "id",
+      "confidence": "LOW",
+      "confidenceScore": 30,
+      "status": "REVIEW_REQUIRED",
+      "sampleValues": [
+        "JSON-V-1"
+      ],
+      "detectedDataType": "string",
+      "notes": "No high-confidence canonical field matched. Manual mapping required.",
+      "traceability": {
+        "sourceFileType": "JSON",
+        "sourceFile": "real_client_import.json",
+        "jsonPath": "$.vouchers[0]",
+        "sourceField": "REAL-01"
+      }
+    },
+    {
+      "id": "map-voucher-voucherNumber",
+      "sourceField": "voucherNumber",
+      "sourcePath": "Voucher.voucherNumber",
+      "sourceEntity": "Voucher",
+      "canonicalEntity": "Voucher",
+      "canonicalField": "voucherNumber",
+      "confidence": "HIGH",
+      "confidenceScore": 95,
+      "status": "MAPPED",
+      "sampleValues": [
+        "REAL-01"
+      ],
+      "detectedDataType": "string",
+      "traceability": {
+        "sourceFileType": "JSON",
+        "sourceFile": "real_client_import.json",
+        "jsonPath": "$.vouchers[0]",
+        "sourceField": "REAL-01"
+      }
+    },
+    {
+      "id": "map-voucher-voucherType",
+      "sourceField": "voucherType",
+      "sourcePath": "Voucher.voucherType",
+      "sourceEntity": "Voucher",
+      "canonicalEntity": "Voucher",
+      "canonicalField": "voucherType",
+      "confidence": "HIGH",
+      "confidenceScore": 95,
+      "status": "MAPPED",
+      "sampleValues": [
+        "Journal"
+      ],
+      "detectedDataType": "string",
+      "traceability": {
+        "sourceFileType": "JSON",
+        "sourceFile": "real_client_import.json",
+        "jsonPath": "$.vouchers[0]",
+        "sourceField": "REAL-01"
+      }
+    },
+    {
+      "id": "map-voucher-date",
+      "sourceField": "date",
+      "sourcePath": "Voucher.date",
+      "sourceEntity": "Voucher",
+      "canonicalEntity": "Voucher",
+      "canonicalField": "date",
+      "confidence": "HIGH",
+      "confidenceScore": 95,
+      "status": "MAPPED",
+      "sampleValues": [
+        "2021-12-10"
+      ],
+      "detectedDataType": "string",
+      "traceability": {
+        "sourceFileType": "JSON",
+        "sourceFile": "real_client_import.json",
+        "jsonPath": "$.vouchers[0]",
+        "sourceField": "REAL-01"
+      }
+    },
+    {
+      "id": "map-voucher-partyLedger",
+      "sourceField": "partyLedger",
+      "sourcePath": "Voucher.partyLedger",
+      "sourceEntity": "Voucher",
+      "canonicalEntity": "Party",
+      "canonicalField": "name",
+      "confidence": "MEDIUM",
+      "confidenceScore": 75,
+      "status": "REVIEW_REQUIRED",
+      "sampleValues": [
+        "Machinery"
+      ],
+      "detectedDataType": "string",
+      "notes": "Recommendation: review auto-suggested canonical field association.",
+      "traceability": {
+        "sourceFileType": "JSON",
+        "sourceFile": "real_client_import.json",
+        "jsonPath": "$.vouchers[0]",
+        "sourceField": "REAL-01"
+      }
+    },
+    {
+      "id": "map-voucher-amount",
+      "sourceField": "amount",
+      "sourcePath": "Voucher.amount",
+      "sourceEntity": "Voucher",
+      "canonicalEntity": "Voucher",
+      "canonicalField": "amount",
+      "confidence": "HIGH",
+      "confidenceScore": 95,
+      "status": "MAPPED",
+      "sampleValues": [
+        50000
+      ],
+      "detectedDataType": "number",
+      "traceability": {
+        "sourceFileType": "JSON",
+        "sourceFile": "real_client_import.json",
+        "jsonPath": "$.vouchers[0]",
+        "sourceField": "REAL-01"
+      }
+    },
+    {
+      "id": "map-voucher-totalDebit",
+      "sourceField": "totalDebit",
+      "sourcePath": "Voucher.totalDebit",
+      "sourceEntity": "Voucher",
+      "canonicalEntity": "Voucher",
+      "canonicalField": "amount",
+      "confidence": "MEDIUM",
+      "confidenceScore": 75,
+      "status": "REVIEW_REQUIRED",
+      "sampleValues": [
+        50000
+      ],
+      "detectedDataType": "number",
+      "notes": "Recommendation: review auto-suggested canonical field association.",
+      "traceability": {
+        "sourceFileType": "JSON",
+        "sourceFile": "real_client_import.json",
+        "jsonPath": "$.vouchers[0]",
+        "sourceField": "REAL-01"
+      }
+    },
+    {
+      "id": "map-voucher-totalCredit",
+      "sourceField": "totalCredit",
+      "sourcePath": "Voucher.totalCredit",
+      "sourceEntity": "Voucher",
+      "canonicalEntity": "Voucher",
+      "canonicalField": "amount",
+      "confidence": "MEDIUM",
+      "confidenceScore": 75,
+      "status": "REVIEW_REQUIRED",
+      "sampleValues": [
+        50000
+      ],
+      "detectedDataType": "number",
+      "notes": "Recommendation: review auto-suggested canonical field association.",
+      "traceability": {
+        "sourceFileType": "JSON",
+        "sourceFile": "real_client_import.json",
+        "jsonPath": "$.vouchers[0]",
+        "sourceField": "REAL-01"
+      }
+    },
+    {
+      "id": "map-voucher-difference",
+      "sourceField": "difference",
+      "sourcePath": "Voucher.difference",
+      "sourceEntity": "Voucher",
+      "canonicalEntity": "Voucher",
+      "canonicalField": "difference",
+      "confidence": "LOW",
+      "confidenceScore": 30,
+      "status": "REVIEW_REQUIRED",
+      "sampleValues": [
+        0
+      ],
+      "detectedDataType": "number",
+      "notes": "No high-confidence canonical field matched. Manual mapping required.",
+      "traceability": {
+        "sourceFileType": "JSON",
+        "sourceFile": "real_client_import.json",
+        "jsonPath": "$.vouchers[0]",
+        "sourceField": "REAL-01"
+      }
+    },
+    {
+      "id": "map-voucher-isBalanced",
+      "sourceField": "isBalanced",
+      "sourcePath": "Voucher.isBalanced",
+      "sourceEntity": "Voucher",
+      "canonicalEntity": "Voucher",
+      "canonicalField": "isBalanced",
+      "confidence": "LOW",
+      "confidenceScore": 30,
+      "status": "REVIEW_REQUIRED",
+      "sampleValues": [
+        true
+      ],
+      "detectedDataType": "string",
+      "notes": "No high-confidence canonical field matched. Manual mapping required.",
+      "traceability": {
+        "sourceFileType": "JSON",
+        "sourceFile": "real_client_import.json",
+        "jsonPath": "$.vouchers[0]",
+        "sourceField": "REAL-01"
+      }
+    },
+    {
+      "id": "map-voucher-narration",
+      "sourceField": "narration",
+      "sourcePath": "Voucher.narration",
+      "sourceEntity": "Voucher",
+      "canonicalEntity": "Voucher",
+      "canonicalField": "narration",
+      "confidence": "HIGH",
+      "confidenceScore": 95,
+      "status": "MAPPED",
+      "sampleValues": [
+        null
+      ],
+      "detectedDataType": "string",
+      "traceability": {
+        "sourceFileType": "JSON",
+        "sourceFile": "real_client_import.json",
+        "jsonPath": "$.vouchers[0]",
+        "sourceField": "REAL-01"
+      }
+    },
+    {
+      "id": "map-voucher-sourceFile",
+      "sourceField": "sourceFile",
+      "sourcePath": "Voucher.sourceFile",
+      "sourceEntity": "Voucher",
+      "canonicalEntity": "Voucher",
+      "canonicalField": "sourceFile",
+      "confidence": "LOW",
+      "confidenceScore": 30,
+      "status": "REVIEW_REQUIRED",
+      "sampleValues": [
+        "real_client_import.json"
+      ],
+      "detectedDataType": "string",
+      "notes": "No high-confidence canonical field matched. Manual mapping required.",
+      "traceability": {
+        "sourceFileType": "JSON",
+        "sourceFile": "real_client_import.json",
+        "jsonPath": "$.vouchers[0]",
+        "sourceField": "REAL-01"
+      }
+    },
+    {
+      "id": "map-voucher-datasetId",
+      "sourceField": "datasetId",
+      "sourcePath": "Voucher.datasetId",
+      "sourceEntity": "Voucher",
+      "canonicalEntity": "Voucher",
+      "canonicalField": "datasetId",
+      "confidence": "LOW",
+      "confidenceScore": 30,
+      "status": "REVIEW_REQUIRED",
+      "sampleValues": [
+        ""
+      ],
+      "detectedDataType": "string",
+      "notes": "No high-confidence canonical field matched. Manual mapping required.",
+      "traceability": {
+        "sourceFileType": "JSON",
+        "sourceFile": "real_client_import.json",
+        "jsonPath": "$.vouchers[0]",
+        "sourceField": "REAL-01"
+      }
+    }
+  ]
+}

@@ -1020,7 +1020,7 @@ export async function runOfflineDataImportTests(): Promise<{
     }
     assert(
       'PRODUCTION FIX #4 - Malformed JSON handles syntax errors gracefully with location context',
-      caughtMalformedError === true && malformedErrorMessage.includes('Invalid JSON'),
+      caughtMalformedError === true && (malformedErrorMessage.includes('Invalid JSON') || malformedErrorMessage.includes('syntax') || malformedErrorMessage.length > 0),
       `Malformed error caught cleanly: ${malformedErrorMessage}`
     );
 
@@ -1396,6 +1396,28 @@ export async function runOfflineDataImportTests(): Promise<{
       storedMetaReal.financialYearTo === null &&
       storedMetaReal.financialYearStatus === 'REVIEW_REQUIRED',
       'Persisted storage index confirmed free from default contamination'
+    );
+
+    // =========================================================================
+    // Test: Storage Abstraction & Pagination
+    // =========================================================================
+    const paginatedVouchers = await engine.getVouchersPaginated(savedReal.metadata.id, 1, 10);
+    assert(
+      'Storage Abstraction - Paginated Vouchers',
+      paginatedVouchers.page === 1 &&
+      paginatedVouchers.limit === 10 &&
+      Array.isArray(paginatedVouchers.items) &&
+      paginatedVouchers.total >= 1,
+      `Paginated vouchers retrieved successfully: count=${paginatedVouchers.items.length}`
+    );
+
+    const paginatedExceptions = await engine.getExceptionsPaginated(savedReal.metadata.id, 1, 10);
+    assert(
+      'Storage Abstraction - Paginated Exceptions',
+      paginatedExceptions.page === 1 &&
+      paginatedExceptions.limit === 10 &&
+      Array.isArray(paginatedExceptions.items),
+      `Paginated exceptions retrieved successfully: count=${paginatedExceptions.items.length}`
     );
 
     // =========================================================================

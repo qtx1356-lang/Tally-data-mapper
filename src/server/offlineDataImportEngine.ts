@@ -30,6 +30,8 @@ import {
   SourceTraceability
 } from '../types/offlineDataImport';
 import { OfflineDatasetStorage } from './offlineDatasetStorage';
+import { IStorageProvider, ExceptionPaginationResult, VoucherPaginationResult } from './storage/storageTypes';
+import { getStorageProvider } from './storage/storageFactory';
 import {
   AccountingDirection,
   DebitCreditNormalizationInput,
@@ -59,14 +61,20 @@ export {
 
 export class OfflineDataImportEngine {
   private storage: OfflineDatasetStorage;
+  private storageProvider: IStorageProvider;
 
   constructor(customStorageDir?: string) {
     this.storage = new OfflineDatasetStorage(customStorageDir);
+    this.storageProvider = getStorageProvider();
     this.ensureDefaultSampleIfEmpty();
   }
 
   public getStorage(): OfflineDatasetStorage {
     return this.storage;
+  }
+
+  public getStorageProvider(): IStorageProvider {
+    return this.storageProvider;
   }
 
   /**
@@ -101,19 +109,37 @@ export class OfflineDataImportEngine {
   }
 
   public async streamVouchers(datasetId: string, callback: (voucher: CanonicalVoucher) => void | Promise<void>): Promise<number> {
-    return this.storage.streamVouchers(datasetId, callback);
+    return this.storageProvider.streamVouchers(datasetId, callback);
   }
 
   public async streamVoucherLines(datasetId: string, callback: (line: any) => void | Promise<void>): Promise<number> {
-    return this.storage.streamVoucherLines(datasetId, callback);
+    return this.storageProvider.streamVoucherLines(datasetId, callback);
   }
 
   public async streamExceptions(datasetId: string, callback: (exc: CanonicalAuditException) => void | Promise<void>): Promise<number> {
-    return this.storage.streamExceptions(datasetId, callback);
+    return this.storageProvider.streamExceptions(datasetId, callback);
+  }
+
+  public async getExceptionsPaginated(
+    datasetId: string,
+    page: number,
+    limit: number,
+    filters?: { search?: string; severity?: string; type?: string }
+  ): Promise<ExceptionPaginationResult> {
+    return this.storageProvider.getExceptionsPaginated(datasetId, page, limit, filters);
+  }
+
+  public async getVouchersPaginated(
+    datasetId: string,
+    page: number,
+    limit: number,
+    filters?: { search?: string; voucherType?: string }
+  ): Promise<VoucherPaginationResult> {
+    return this.storageProvider.getVouchersPaginated(datasetId, page, limit, filters);
   }
 
   public async getDatasetAggregates(datasetId: string) {
-    return this.storage.getDatasetAggregates(datasetId);
+    return this.storageProvider.getDatasetAggregates(datasetId);
   }
 
   // =========================================================================

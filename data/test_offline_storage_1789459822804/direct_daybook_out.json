@@ -1,0 +1,7 @@
+{
+  "vouchers": [
+    {"id":"vch-stream-1","voucherNumber":"DIR-001","voucherType":"Receipt","date":"2024-08-15","partyLedger":null,"amount":3000,"totalDebit":3000,"totalCredit":3000,"narration":null,"entries":[{"id":"line-stream-1-1","ledgerName":"Cash","amount":3000,"isDebit":true,"isDeemedPositive":null,"rawAmount":3000,"sourceAmount":3000,"normalizedAmount":3000,"direction":"Debit","ruleApplied":"Explicit isDebit source field resolved to true (Debit)","reviewRequired":false,"traceability":{"sourceFileType":"JSON","sourceFile":"direct_daybook_stream.json","jsonPath":"$.DayBook[0].entries[0]","sourceField":"Cash"}},{"id":"line-stream-1-2","ledgerName":"Consulting Income","amount":3000,"isDebit":false,"isDeemedPositive":null,"rawAmount":3000,"sourceAmount":3000,"normalizedAmount":3000,"direction":"Credit","ruleApplied":"Explicit isDebit source field resolved to false (Credit)","reviewRequired":false,"traceability":{"sourceFileType":"JSON","sourceFile":"direct_daybook_stream.json","jsonPath":"$.DayBook[0].entries[1]","sourceField":"Consulting Income"}}],"isBalanced":true,"difference":0,"reviewRequired":false,"sourceFile":"direct_daybook_stream.json","datasetId":"","traceability":{"sourceFileType":"JSON","sourceFile":"direct_daybook_stream.json","jsonPath":"$.DayBook[0]","sourceField":"DIR-001"}}
+  ],
+  "ledgers": [],
+  "stockItems": []
+}

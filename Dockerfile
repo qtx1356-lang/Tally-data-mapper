@@ -34,8 +34,8 @@ RUN npm install --omit=dev
 COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/package.json ./package.json
 
-# Create directories for persistent offline dataset storage and streaming uploads
-RUN mkdir -p /app/data/offline_datasets /app/data/temp_uploads && chown -R node:node /app/data
+# Create directories for persistent offline dataset storage, uploads, and streaming sessions
+RUN mkdir -p /app/data/offline_datasets /app/data/uploads /app/data/temp_uploads /app/data/import_sessions && chown -R node:node /app/data
 
 # Security: Run as unprivileged node user
 USER node
