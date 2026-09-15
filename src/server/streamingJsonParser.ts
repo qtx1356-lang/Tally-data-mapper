@@ -124,6 +124,7 @@ export class StreamingJsonParser {
     let inHeaderString = false;
     let isHeaderEscaped = false;
     let headerStrBuffer = '';
+    let headerQuoteChar: string | null = null;
     let lastHeaderFinishedStr = '';
 
     const readStream = fs.createReadStream(filePath, {
@@ -133,16 +134,58 @@ export class StreamingJsonParser {
 
     let lastProgressReportTime = Date.now();
 
-    const processSingleVoucherObject = (objStr: string, itemPath?: string) => {
+    const processSingleVoucherObject = (rawObjInput: string | any, itemPath?: string) => {
       let rawVch: any;
-      try {
-        rawVch = JSON.parse(objStr);
-      } catch (e) {
-        // Skip malformed individual segment if corrupted
-        return;
+      if (typeof rawObjInput === 'string') {
+        try {
+          rawVch = JSON.parse(rawObjInput);
+        } catch (e) {
+          // Skip malformed individual segment if corrupted
+          return;
+        }
+      } else {
+        rawVch = rawObjInput;
       }
 
       if (!rawVch || typeof rawVch !== 'object') {
+        return;
+      }
+
+      // Check if this object contains an array of vouchers or messages
+      if (Array.isArray(rawVch.VOUCHER)) {
+        rawVch.VOUCHER.forEach((subVch: any, subIdx: number) => {
+          const subPath = itemPath ? `${itemPath}.VOUCHER[${subIdx}]` : `VOUCHER[${subIdx}]`;
+          processSingleVoucherObject(subVch, subPath);
+        });
+        return;
+      }
+      if (Array.isArray(rawVch.voucher)) {
+        rawVch.voucher.forEach((subVch: any, subIdx: number) => {
+          const subPath = itemPath ? `${itemPath}.voucher[${subIdx}]` : `voucher[${subIdx}]`;
+          processSingleVoucherObject(subVch, subPath);
+        });
+        return;
+      }
+      if (Array.isArray(rawVch.TALLYMESSAGE)) {
+        rawVch.TALLYMESSAGE.forEach((subMsg: any, subIdx: number) => {
+          const subPath = itemPath ? `${itemPath}.TALLYMESSAGE[${subIdx}]` : `TALLYMESSAGE[${subIdx}]`;
+          processSingleVoucherObject(subMsg, subPath);
+        });
+        return;
+      }
+      if (Array.isArray(rawVch.TRANSACTIONS)) {
+        rawVch.TRANSACTIONS.forEach((subTx: any, subIdx: number) => {
+          const subPath = itemPath ? `${itemPath}.TRANSACTIONS[${subIdx}]` : `TRANSACTIONS[${subIdx}]`;
+          processSingleVoucherObject(subTx, subPath);
+        });
+        return;
+      }
+      if (Array.isArray(rawVch.DayBook) || Array.isArray(rawVch.DAYBOOK) || Array.isArray(rawVch.daybook)) {
+        const dbArr = rawVch.DayBook || rawVch.DAYBOOK || rawVch.daybook;
+        dbArr.forEach((subDb: any, subIdx: number) => {
+          const subPath = itemPath ? `${itemPath}.DayBook[${subIdx}]` : `DayBook[${subIdx}]`;
+          processSingleVoucherObject(subDb, subPath);
+        });
         return;
       }
 
@@ -178,44 +221,89 @@ export class StreamingJsonParser {
         isWrapped = true;
         wrapperKey = 'ENVELOPE';
       }
+      if (v.BODY && typeof v.BODY === 'object') {
+        v = v.BODY.DATA?.TALLYMESSAGE || v.BODY.TALLYMESSAGE || v.BODY;
+        isWrapped = true;
+        wrapperKey = wrapperKey ? `${wrapperKey}.BODY` : 'BODY';
+      }
+      if (v.DATA && typeof v.DATA === 'object') {
+        v = v.DATA.TALLYMESSAGE || v.DATA;
+        isWrapped = true;
+        wrapperKey = wrapperKey ? `${wrapperKey}.DATA` : 'DATA';
+      }
       if (v.TALLYMESSAGE && typeof v.TALLYMESSAGE === 'object') {
+        if (Array.isArray(v.TALLYMESSAGE)) {
+          v.TALLYMESSAGE.forEach((subMsg: any, subIdx: number) => {
+            const subPath = itemPath ? `${itemPath}.TALLYMESSAGE[${subIdx}]` : `TALLYMESSAGE[${subIdx}]`;
+            processSingleVoucherObject(subMsg, subPath);
+          });
+          return;
+        }
         v = v.TALLYMESSAGE;
         isWrapped = true;
         wrapperKey = wrapperKey ? `${wrapperKey}.TALLYMESSAGE` : 'TALLYMESSAGE';
       }
-      if (v.VOUCHER && typeof v.VOUCHER === 'object') {
-        v = v.VOUCHER;
+      if (v.DayBook && typeof v.DayBook === 'object') {
+        v = v.DayBook;
         isWrapped = true;
-        wrapperKey = wrapperKey ? `${wrapperKey}.VOUCHER` : 'VOUCHER';
-      } else if (v.voucher && typeof v.voucher === 'object') {
-        v = v.voucher;
-        isWrapped = true;
-        wrapperKey = wrapperKey ? `${wrapperKey}.voucher` : 'voucher';
+        wrapperKey = wrapperKey ? `${wrapperKey}.DayBook` : 'DayBook';
       } else if (v.DAYBOOK && typeof v.DAYBOOK === 'object') {
         v = v.DAYBOOK;
         isWrapped = true;
         wrapperKey = wrapperKey ? `${wrapperKey}.DAYBOOK` : 'DAYBOOK';
       }
+      if (v.VOUCHER && typeof v.VOUCHER === 'object') {
+        if (Array.isArray(v.VOUCHER)) {
+          v.VOUCHER.forEach((subV: any, subIdx: number) => {
+            const subPath = itemPath ? `${itemPath}.VOUCHER[${subIdx}]` : `VOUCHER[${subIdx}]`;
+            processSingleVoucherObject(subV, subPath);
+          });
+          return;
+        }
+        v = v.VOUCHER;
+        isWrapped = true;
+        wrapperKey = wrapperKey ? `${wrapperKey}.VOUCHER` : 'VOUCHER';
+      } else if (v.voucher && typeof v.voucher === 'object') {
+        if (Array.isArray(v.voucher)) {
+          v.voucher.forEach((subV: any, subIdx: number) => {
+            const subPath = itemPath ? `${itemPath}.voucher[${subIdx}]` : `voucher[${subIdx}]`;
+            processSingleVoucherObject(subV, subPath);
+          });
+          return;
+        }
+        v = v.voucher;
+        isWrapped = true;
+        wrapperKey = wrapperKey ? `${wrapperKey}.voucher` : 'voucher';
+      }
+
+      // Check if this is a Master record (LEDGER, GROUP, STOCKITEM, COMPANY, CURRENCY, UNIT) rather than a voucher
+      if (v.LEDGER || v.ledger || v.GROUP || v.group || v.STOCKITEM || v.stockItem || v.CURRENCY || v.UNIT) {
+        if (!v.VOUCHER && !v.voucher && !v.voucherNumber && !v.VOUCHERNUMBER && !v.vchNo && !v.lines && !v.entries && !v.ALLLEDGERENTRIES && !v['ALLLEDGERENTRIES.LIST']) {
+          return; // Skip master entities cleanly
+        }
+      }
 
       // Check if object is a candidate voucher object
-      const vchNumberRaw = v.voucherNumber || v.VOUCHERNUMBER || v.number || v.vchNo || v.VchNo || v.invoiceNo || null;
+      const vchNumberRaw = v.voucherNumber || v.VOUCHERNUMBER || v.number || v.vchNo || v.VchNo || v.invoiceNo || v.InvoiceNo || null;
       const vchTypeRaw = v.voucherType || v.VOUCHERTYPENAME || v.VOUCHERTYPE || v.type || v.Type || v.vchType || v.VchType || null;
-      const rawDate = v.date || v.DATE || v.Date || null;
-      const partyNameRaw = v.partyLedgerName || v.PARTYLEDGERNAME || v.party || v.Party || v.partyName || null;
+      const rawDate = v.date || v.DATE || v.Date || v.voucherDate || v.txDate || null;
+      const partyNameRaw = v.partyLedgerName || v.PARTYLEDGERNAME || v.party || v.Party || v.partyName || v.PartyName || null;
       const narrationRaw = v.narration || v.NARRATION || v.Narration || null;
 
       const hasEntries = Boolean(
-        Array.isArray(v.entries) ||
-        Array.isArray(v.ALLLEDGERENTRIES) ||
+        Array.isArray(v.entries) || (v.entries && typeof v.entries === 'object') ||
+        Array.isArray(v.ALLLEDGERENTRIES) || (v.ALLLEDGERENTRIES && typeof v.ALLLEDGERENTRIES === 'object') ||
         (v.ALLLEDGERENTRIES && Array.isArray(v.ALLLEDGERENTRIES.LEDGERENTRIES)) ||
-        Array.isArray(v['ALLLEDGERENTRIES.LIST']) ||
-        Array.isArray(v.LEDGERENTRIES) ||
-        Array.isArray(v.ledgerEntries) ||
-        Array.isArray(v.lines) ||
-        (v.ALLLEDGERENTRIES && typeof v.ALLLEDGERENTRIES === 'object')
+        (v.ALLLEDGERENTRIES && Array.isArray(v.ALLLEDGERENTRIES.LIST)) ||
+        Array.isArray(v['ALLLEDGERENTRIES.LIST']) || (v['ALLLEDGERENTRIES.LIST'] && typeof v['ALLLEDGERENTRIES.LIST'] === 'object') ||
+        Array.isArray(v.LEDGERENTRIES) || (v.LEDGERENTRIES && typeof v.LEDGERENTRIES === 'object') ||
+        Array.isArray(v['LEDGERENTRIES.LIST']) || (v['LEDGERENTRIES.LIST'] && typeof v['LEDGERENTRIES.LIST'] === 'object') ||
+        Array.isArray(v.ledgerEntries) || (v.ledgerEntries && typeof v.ledgerEntries === 'object') ||
+        Array.isArray(v.lines) || (v.lines && typeof v.lines === 'object') ||
+        Array.isArray(v['ALLINVENTORYENTRIES.LIST']) || Array.isArray(v.ALLINVENTORYENTRIES)
       );
 
-      const isVoucherCandidate = Boolean(vchNumberRaw || vchTypeRaw || rawDate || partyNameRaw || narrationRaw || hasEntries || isWrapped);
+      const isVoucherCandidate = Boolean(vchNumberRaw || vchTypeRaw || rawDate || partyNameRaw || narrationRaw || hasEntries);
 
       if (!isVoucherCandidate) {
         return; // Skip non-voucher metadata objects
@@ -268,28 +356,82 @@ export class StreamingJsonParser {
         rawEntries = v.ALLLEDGERENTRIES; 
         rawEntriesPathSegments = ['ALLLEDGERENTRIES']; 
       } else if (v.ALLLEDGERENTRIES && Array.isArray(v.ALLLEDGERENTRIES.LEDGERENTRIES)) { 
-        // Nested object: ALLLEDGERENTRIES -> LEDGERENTRIES array
         rawEntries = v.ALLLEDGERENTRIES.LEDGERENTRIES; 
         rawEntriesPathSegments = ['ALLLEDGERENTRIES', 'LEDGERENTRIES']; 
       } else if (Array.isArray(v['ALLLEDGERENTRIES.LIST'])) { 
-        // Literal single Tally key with dot
         rawEntries = v['ALLLEDGERENTRIES.LIST']; 
         rawEntriesPathSegments = ['ALLLEDGERENTRIES.LIST']; 
+      } else if (v.ALLLEDGERENTRIES && Array.isArray(v.ALLLEDGERENTRIES.LIST)) {
+        rawEntries = v.ALLLEDGERENTRIES.LIST;
+        rawEntriesPathSegments = ['ALLLEDGERENTRIES', 'LIST'];
       } else if (Array.isArray(v.LEDGERENTRIES)) { 
         rawEntries = v.LEDGERENTRIES; 
         rawEntriesPathSegments = ['LEDGERENTRIES']; 
+      } else if (Array.isArray(v['LEDGERENTRIES.LIST'])) {
+        rawEntries = v['LEDGERENTRIES.LIST'];
+        rawEntriesPathSegments = ['LEDGERENTRIES.LIST'];
+      } else if (v.LEDGERENTRIES && Array.isArray(v.LEDGERENTRIES.LIST)) {
+        rawEntries = v.LEDGERENTRIES.LIST;
+        rawEntriesPathSegments = ['LEDGERENTRIES', 'LIST'];
       } else if (Array.isArray(v.ledgerEntries)) { 
         rawEntries = v.ledgerEntries; 
         rawEntriesPathSegments = ['ledgerEntries']; 
       } else if (Array.isArray(v.lines)) { 
         rawEntries = v.lines; 
         rawEntriesPathSegments = ['lines']; 
-      } else if (v.ALLLEDGERENTRIES && v.ALLLEDGERENTRIES.LEDGERENTRIES && typeof v.ALLLEDGERENTRIES.LEDGERENTRIES === 'object') {
+      } else if (v['ALLLEDGERENTRIES.LIST'] && typeof v['ALLLEDGERENTRIES.LIST'] === 'object' && !Array.isArray(v['ALLLEDGERENTRIES.LIST'])) {
+        rawEntries = [v['ALLLEDGERENTRIES.LIST']];
+        rawEntriesPathSegments = ['ALLLEDGERENTRIES.LIST'];
+      } else if (v.ALLLEDGERENTRIES && v.ALLLEDGERENTRIES.LEDGERENTRIES && typeof v.ALLLEDGERENTRIES.LEDGERENTRIES === 'object' && !Array.isArray(v.ALLLEDGERENTRIES.LEDGERENTRIES)) {
         rawEntries = [v.ALLLEDGERENTRIES.LEDGERENTRIES];
         rawEntriesPathSegments = ['ALLLEDGERENTRIES', 'LEDGERENTRIES'];
+      } else if (v.ALLLEDGERENTRIES && v.ALLLEDGERENTRIES.LIST && typeof v.ALLLEDGERENTRIES.LIST === 'object' && !Array.isArray(v.ALLLEDGERENTRIES.LIST)) {
+        rawEntries = [v.ALLLEDGERENTRIES.LIST];
+        rawEntriesPathSegments = ['ALLLEDGERENTRIES', 'LIST'];
       } else if (v.ALLLEDGERENTRIES && typeof v.ALLLEDGERENTRIES === 'object' && !Array.isArray(v.ALLLEDGERENTRIES)) {
         rawEntries = [v.ALLLEDGERENTRIES];
         rawEntriesPathSegments = ['ALLLEDGERENTRIES'];
+      } else if (v['LEDGERENTRIES.LIST'] && typeof v['LEDGERENTRIES.LIST'] === 'object' && !Array.isArray(v['LEDGERENTRIES.LIST'])) {
+        rawEntries = [v['LEDGERENTRIES.LIST']];
+        rawEntriesPathSegments = ['LEDGERENTRIES.LIST'];
+      } else if (v.LEDGERENTRIES && typeof v.LEDGERENTRIES === 'object' && !Array.isArray(v.LEDGERENTRIES)) {
+        rawEntries = [v.LEDGERENTRIES];
+        rawEntriesPathSegments = ['LEDGERENTRIES'];
+      } else if (v.ledgerEntries && typeof v.ledgerEntries === 'object' && !Array.isArray(v.ledgerEntries)) {
+        rawEntries = [v.ledgerEntries];
+        rawEntriesPathSegments = ['ledgerEntries'];
+      } else if (v.lines && typeof v.lines === 'object' && !Array.isArray(v.lines)) {
+        rawEntries = [v.lines];
+        rawEntriesPathSegments = ['lines'];
+      } else if (v.entries && typeof v.entries === 'object' && !Array.isArray(v.entries)) {
+        rawEntries = [v.entries];
+        rawEntriesPathSegments = ['entries'];
+      }
+
+      // Check nested inventory accounting allocations if ledger entries are still empty
+      if (rawEntries.length === 0) {
+        const invList = v['ALLINVENTORYENTRIES.LIST'] || v.ALLINVENTORYENTRIES || v.inventoryEntries;
+        if (Array.isArray(invList)) {
+          for (const inv of invList) {
+            const allocs = inv['ACCOUNTINGALLOCATIONS.LIST'] || inv.ACCOUNTINGALLOCATIONS || inv.accountingAllocations;
+            if (Array.isArray(allocs)) {
+              rawEntries.push(...allocs);
+              rawEntriesPathSegments = ['ALLINVENTORYENTRIES.LIST', 'ACCOUNTINGALLOCATIONS.LIST'];
+            } else if (allocs && typeof allocs === 'object') {
+              rawEntries.push(allocs);
+              rawEntriesPathSegments = ['ALLINVENTORYENTRIES.LIST', 'ACCOUNTINGALLOCATIONS.LIST'];
+            }
+          }
+        } else if (invList && typeof invList === 'object') {
+          const allocs = invList['ACCOUNTINGALLOCATIONS.LIST'] || invList.ACCOUNTINGALLOCATIONS || invList.accountingAllocations;
+          if (Array.isArray(allocs)) {
+            rawEntries.push(...allocs);
+            rawEntriesPathSegments = ['ALLINVENTORYENTRIES.LIST', 'ACCOUNTINGALLOCATIONS.LIST'];
+          } else if (allocs && typeof allocs === 'object') {
+            rawEntries.push(allocs);
+            rawEntriesPathSegments = ['ALLINVENTORYENTRIES.LIST', 'ACCOUNTINGALLOCATIONS.LIST'];
+          }
+        }
       }
 
       const entries: CanonicalVoucherLine[] = [];
@@ -453,6 +595,10 @@ export class StreamingJsonParser {
             const char = text[i];
             byteOffset++;
 
+            if (byteOffset === 1 && char.charCodeAt(0) === 0xFEFF) {
+              continue;
+            }
+
             if (recentCharBuffer.length >= MAX_RECENT_BUFFER) {
               recentCharBuffer = recentCharBuffer.substring(1);
             }
@@ -523,8 +669,9 @@ export class StreamingJsonParser {
               }
 
               if (!inHeaderString) {
-                if (char === '"') {
+                if (char === '"' || char === "'") {
                   inHeaderString = true;
+                  headerQuoteChar = char;
                   headerStrBuffer = '';
                 } else if (char === ':') {
                   currentPendingKey = lastHeaderFinishedStr;
@@ -579,8 +726,9 @@ export class StreamingJsonParser {
                 } else if (char === '\\') {
                   isHeaderEscaped = true;
                   headerStrBuffer += char;
-                } else if (char === '"') {
+                } else if (char === headerQuoteChar) {
                   inHeaderString = false;
+                  headerQuoteChar = null;
                   lastHeaderFinishedStr = headerStrBuffer;
                   headerStrBuffer = '';
                 } else {
@@ -610,18 +758,12 @@ export class StreamingJsonParser {
                     } else {
                       // Return to header scanning if this was a non-voucher array (e.g. VERSION: [1, 0])
                       state = 'HEADER';
+                      currentPendingKey = null;
                     }
                   }
-                } else if (char === ',' || char === ':' || char === ';' || /\s/.test(char)) {
-                  // Standard array value separator, colon, semicolon or whitespace
-                  continue;
-                } else if (/^[a-zA-Z0-9_\-+.]/.test(char)) {
-                  // Standard primitive array token character (numbers, negative numbers, decimals, scientific notation, booleans, null, identifiers)
-                  continue;
                 } else {
-                  // Genuine JSON syntax error
-                  const snippet = recentCharBuffer.slice(-30).replace(/\s+/g, ' ');
-                  throw new Error(`Invalid JSON in ${fileName} (phase: Processing) at byte ${byteOffset}, line ${lineNum}, column ${colNum}, path ${detectedContainerPath}: Unexpected character '${char}' in array near "${snippet}"`);
+                  // Standard array value separator, whitespace, primitive array token character, or comments
+                  continue;
                 }
               } else {
                 if (isEscaped) {

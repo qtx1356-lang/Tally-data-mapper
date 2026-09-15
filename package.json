@@ -11,7 +11,10 @@
     "dev": "tsx server.ts",
     "dev:desktop": "concurrently \"npm run dev\" \"wait-on http://localhost:3000 && electron .\"",
     "build": "vite build && esbuild server.ts --bundle --platform=node --format=cjs --packages=external --sourcemap --outfile=dist/server.cjs",
+    "build:web": "npm run build",
+    "build:desktop": "npm run dist",
     "start": "node dist/server.cjs",
+    "start:web": "node dist/server.cjs",
     "dist": "npm run build && electron-builder --win",
     "clean": "rm -rf dist server.js",
     "lint": "tsc --noEmit"

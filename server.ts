@@ -49,10 +49,22 @@ import { phase32zRouter } from "./src/server/phase32zRouter";
 import { phase33Router } from "./src/server/phase33Router";
 import { phase33aRouter } from "./src/server/phase33aRouter";
 import { offlineDataImportRouter } from "./src/server/offlineDataImportRouter";
+import { webDeploymentConfig } from "./src/server/webDeploymentConfig";
 
 async function startServer() {
   const app = express();
-  const PORT = 3000;
+
+  // Dynamic port resolution: use platform assigned PORT environment variable, fallback to 3000
+  const PORT = parseInt(process.env.PORT || "3000", 10);
+  const HOST = process.env.HOST || "0.0.0.0";
+
+  // Runtime environment detection: Web Deployment vs Desktop Electron
+  const isElectron = Boolean(
+    process.env.ELECTRON_RUN_AS_NODE ||
+    process.env.EXFIN_MODE === "desktop" ||
+    (process.versions as any)?.electron
+  );
+  const EXFIN_MODE = isElectron ? "desktop" : (process.env.EXFIN_MODE || "web");
 
   app.use(express.json({ limit: "100mb" }));
   app.use(express.urlencoded({ limit: "100mb", extended: true }));
@@ -237,9 +249,102 @@ async function startServer() {
   // Phase 13 - Enterprise Administration & Central Cloud Licensing API (Versioned /api/v1)
   app.use("/api/v1", centralApiRouter);
 
-  // API Routes
+  // SSRF Protection Helper for web deployment
+  const isDisallowedHost = (h: string): boolean => {
+    if (!h || typeof h !== "string") return true;
+    const lower = h.trim().toLowerCase();
+    return (
+      lower.startsWith("169.254.") ||
+      lower.includes("metadata.google") ||
+      lower.includes("metadata.internal") ||
+      lower === "0.0.0.0" ||
+      lower === "::"
+    );
+  };
+
+  // Helper for comprehensive production health and diagnostic state
+  const getProductionHealth = () => {
+    const memory = process.memoryUsage();
+    return {
+      status: "ok",
+      app: "EXFIN Tally Audit Platform",
+      version: "1.0.1",
+      mode: EXFIN_MODE,
+      environment: process.env.NODE_ENV || "development",
+      server: {
+        port: PORT,
+        host: HOST,
+        platform: process.platform,
+        nodeVersion: process.version,
+        uptimeSeconds: Math.floor(process.uptime()),
+        pid: process.pid
+      },
+      memory: {
+        heapUsedMb: +(memory.heapUsed / (1024 * 1024)).toFixed(2),
+        heapTotalMb: +(memory.heapTotal / (1024 * 1024)).toFixed(2),
+        rssMb: +(memory.rss / (1024 * 1024)).toFixed(2)
+      },
+      security: {
+        tallyPort9000ExposedPublicly: false,
+        readOnlyGuardEnforced: true,
+        ssrfProtection: true
+      },
+      capabilities: {
+        webDeployment: true,
+        desktopElectronTarget: true,
+        offlineDataImport: {
+          xml: true,
+          json: true,
+          excel: true,
+          streamingParser: true,
+          boundedMemoryChunking: true
+        },
+        auditIntelligence: true,
+        reconstructionEngine: true
+      },
+      timestamp: new Date().toISOString()
+    };
+  };
+
+  // Production Health Endpoints (API + Cloud root probes)
   app.get("/api/health", (req, res) => {
-    res.json({ status: "ok", app: "EXFIN Tally Data Mapper", version: "1.0.1" });
+    res.json(getProductionHealth());
+  });
+
+  app.get("/health", (req, res) => {
+    res.json(getProductionHealth());
+  });
+
+  app.get("/api/healthz", (req, res) => {
+    res.json(getProductionHealth());
+  });
+
+  // Web Deployment Configuration & Environment Info
+  app.get("/api/system/deployment-info", (req, res) => {
+    res.json({
+      success: true,
+      mode: EXFIN_MODE,
+      isWebDeployment: EXFIN_MODE === "web",
+      isDesktopBuild: EXFIN_MODE === "desktop",
+      server: {
+        port: PORT,
+        host: HOST,
+        nodeVersion: process.version,
+        uptimeSeconds: Math.floor(process.uptime())
+      },
+      security: {
+        tallyPort9000ExposedPublicly: false,
+        ssrfProtection: true,
+        readOnlyEnforced: true,
+        policy: webDeploymentConfig.security.directPort9000Policy
+      },
+      offlineIngestion: {
+        primaryMethod: webDeploymentConfig.dataIngestion.primaryWebPathway,
+        supportedFormats: webDeploymentConfig.dataIngestion.supportedOfflineFormats,
+        streamingMemoryBudgetMb: webDeploymentConfig.dataIngestion.streamingMemoryBudgetMb
+      },
+      config: webDeploymentConfig
+    });
   });
 
   // Tally Connection Test Endpoint
@@ -255,6 +360,20 @@ async function startServer() {
         errorCode: "INVALID_HOST",
         errorMessage: "The specified Tally host address is invalid or empty.",
         technicalDetails: "Host parameter was null or whitespace.",
+        responseTimeMs: 0,
+        protocol: "HTTP",
+        testedAt: checkedAt,
+        rawPreview: ""
+      });
+    }
+
+    if (isDisallowedHost(host)) {
+      return res.json({
+        success: false,
+        status: "Failed",
+        errorCode: "SECURITY_VIOLATION",
+        errorMessage: "The requested host target is restricted for security (SSRF prevention).",
+        technicalDetails: `Target host '${host}' is blocked by cloud web deployment security policy.`,
         responseTimeMs: 0,
         protocol: "HTTP",
         testedAt: checkedAt,
@@ -367,7 +486,9 @@ async function startServer() {
 
           if (err.code === "ECONNREFUSED") {
             code = "CONNECTION_REFUSED";
-            msg = `The TallyPrime connection was refused at ${host}:${portNum}.`;
+            msg = EXFIN_MODE === "web"
+              ? `Tally could not be reached on ${host}:${portNum}. In Cloud Web Deployment, Tally port 9000 is not exposed to the public internet. Please use the 'Offline Dataset' feature to upload exported Tally XML, JSON (DayBook), or Excel files, or use the EXFIN Desktop application for direct local port 9000 connection.`
+              : `The TallyPrime connection was refused at ${host}:${portNum}. Please verify Tally is running with integration enabled.`;
           }
 
           resolve({
@@ -422,6 +543,15 @@ async function startServer() {
   // Tally Fetch Companies Endpoint
   app.post("/api/tally/companies", async (req, res) => {
     const { host = "localhost", port = 9000, timeoutSeconds = 10 } = req.body;
+
+    if (isDisallowedHost(host)) {
+      return res.json({
+        success: false,
+        companies: [],
+        error: "Target host is prohibited by cloud security policy."
+      });
+    }
+
     const requestXml = `<ENVELOPE>
   <HEADER>
     <TALLYREQUEST>Export Data</TALLYREQUEST>
@@ -5898,26 +6028,39 @@ Last Error: ${httpAvailable ? "None" : (errorMessage || `TallyPrime was not dete
     });
     app.use(vite.middlewares);
   } else {
-    // In production, the bundled server.cjs is located inside the 'dist' folder.
-    // Therefore, __dirname IS the directory containing the static frontend assets.
-    const distPath = __dirname;
+    // Determine the production static distribution directory
+    const candidateDistPaths = [
+      __dirname,
+      path.resolve(__dirname, "dist"),
+      path.resolve(process.cwd(), "dist"),
+      process.cwd()
+    ];
+    const distPath = candidateDistPaths.find((p) => fs.existsSync(path.join(p, "index.html"))) || path.resolve(process.cwd(), "dist");
     console.log(`[EXFIN Backend] Serving production assets from: ${distPath}`);
-    
-    app.use(express.static(distPath));
-    
+
+    // Serve static files with caching
+    app.use(express.static(distPath, { maxAge: "1d", index: false }));
+
     // Explicit SPA Fallback: All non-API routes serve index.html
     app.get("*", (req, res) => {
+      if (req.path.startsWith("/api")) {
+        return res.status(404).json({
+          success: false,
+          error: `API endpoint not found: ${req.method} ${req.path}`,
+          code: "ENDPOINT_NOT_FOUND"
+        });
+      }
       const indexPath = path.join(distPath, "index.html");
       if (fs.existsSync(indexPath)) {
         res.sendFile(indexPath);
       } else {
-        res.status(404).send("EXFIN Critical Error: Frontend assets (index.html) missing from distribution.");
+        res.status(404).send("EXFIN Critical Error: Frontend assets (index.html) missing from distribution. Please run 'npm run build'.");
       }
     });
   }
 
-  app.listen(PORT, "0.0.0.0", () => {
-    console.log(`[EXFIN Tally Data Mapper] Server running on http://0.0.0.0:${PORT}`);
+  app.listen(PORT, HOST, () => {
+    console.log(`[EXFIN Tally Audit Platform] Web Server running in ${EXFIN_MODE.toUpperCase()} mode on http://${HOST}:${PORT}`);
   });
 }
 

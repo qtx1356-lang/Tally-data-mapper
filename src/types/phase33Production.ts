@@ -12,9 +12,10 @@ export interface AppDiagnostics {
     heapTotal: number;
     rss: number;
   };
-  tallyStatus: 'OFFLINE' | 'CONNECTED' | 'ERROR';
-  databaseStatus: 'MOCKED_MEMORY' | 'SQLITE_READY' | 'ERROR';
+  tallyStatus: 'OFFLINE' | 'CONNECTED' | 'ERROR' | 'LOCAL_PORT_9000_STANDBY' | 'CLOUD_WEB_OFFLINE_DATASET_READY' | 'DESKTOP_READY' | 'WEB_MODE_OFFLINE_INGESTION';
+  databaseStatus: 'MOCKED_MEMORY' | 'SQLITE_READY' | 'ERROR' | 'DISK_BOUNDED_JSONL' | 'PERSISTENT_JSONL_STORAGE';
   lastErrors: string[];
+  deploymentMode?: 'web' | 'desktop';
 }
 
 export interface SupportBundle {

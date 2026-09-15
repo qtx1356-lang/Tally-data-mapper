@@ -3,6 +3,8 @@ const path = require('path');
 const { spawn } = require('child_process');
 const http = require('http');
 
+const PORT = process.env.PORT || '3000';
+
 let mainWindow;
 let serverProcess;
 
@@ -44,8 +46,8 @@ function createWindow() {
     autoHideMenuBar: true
   });
 
-  mainWindow.loadURL('http://localhost:3000').catch(err => {
-    console.error("Failed to load localhost:3000", err);
+  mainWindow.loadURL(`http://localhost:${PORT}`).catch(err => {
+    console.error(`Failed to load localhost:${PORT}`, err);
     dialog.showErrorBox("Connection Error", "Failed to connect to the internal EXFIN server.");
   });
 }
@@ -69,7 +71,9 @@ app.whenReady().then(async () => {
       env: { 
         ...process.env, 
         NODE_ENV: 'production', 
-        ELECTRON_RUN_AS_NODE: '1' 
+        ELECTRON_RUN_AS_NODE: '1',
+        EXFIN_MODE: 'desktop',
+        PORT: PORT
       } 
     });
 
@@ -79,14 +83,14 @@ app.whenReady().then(async () => {
     // Readiness check
     try {
       console.log("[EXFIN] Waiting for backend readiness...");
-      await checkBackendReady('http://127.0.0.1:3000/api/health', 20000);
+      await checkBackendReady(`http://127.0.0.1:${PORT}/api/health`, 20000);
       console.log("[EXFIN] Backend ready, creating window.");
       createWindow();
     } catch (timeoutErr) {
       console.error("[EXFIN] Backend failed to start:", timeoutErr);
       dialog.showErrorBox(
         "Application Startup Failed", 
-        "The EXFIN data engine failed to initialize within the expected time.\n\nPlease check if port 3000 is being blocked by another application."
+        `The EXFIN data engine failed to initialize within the expected time.\n\nPlease check if port ${PORT} is being blocked by another application.`
       );
       app.quit();
     }

@@ -1,0 +1,53 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "application": {
+    "name": "EXFIN Tally Audit Platform",
+    "version": "1.0.1",
+    "type": "enterprise-accounting-audit",
+    "deploymentTarget": "cloud-node-web"
+  },
+  "deployment": {
+    "port": "env:PORT:-3000",
+    "host": "env:HOST:-0.0.0.0",
+    "nodeVersion": ">=20.0.0",
+    "buildCommand": "npm run build",
+    "startCommand": "node dist/server.cjs",
+    "distPath": "dist",
+    "spaFallback": true
+  },
+  "networking": {
+    "publicPorts": [
+      {
+        "port": "PORT",
+        "protocol": "HTTP/HTTPS",
+        "description": "Public web application, API routes, and Vite SPA"
+      }
+    ],
+    "privatePorts": [
+      {
+        "port": 9000,
+        "protocol": "Tally XML/ODBC",
+        "exposedPublicly": false,
+        "reason": "Tally port 9000 is internal/LAN only and strictly isolated from public internet exposure."
+      }
+    ]
+  },
+  "healthCheck": {
+    "path": "/api/health",
+    "alternativePaths": ["/health", "/api/healthz"],
+    "expectedStatus": 200,
+    "timeoutSeconds": 5,
+    "intervalSeconds": 30
+  },
+  "features": {
+    "webDeployment": true,
+    "desktopElectronTarget": true,
+    "offlineImport": {
+      "xml": true,
+      "json": true,
+      "excel": true,
+      "streamingParser": true,
+      "maxUploadSizeMb": 500
+    }
+  }
+}

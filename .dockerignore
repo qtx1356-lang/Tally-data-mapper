@@ -1,0 +1,9 @@
+node_modules
+dist
+release
+.git
+.github
+*.log
+data/temp_uploads/*
+data/DayBook_126MB_RealFixture.json
+test*

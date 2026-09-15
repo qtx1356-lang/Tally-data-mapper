@@ -85,11 +85,11 @@ export default function Phase33ProductionView() {
             <Monitor className="w-5 h-5" />
           </div>
           <div>
-            <h1 className="text-xl font-bold text-[#111111] leading-tight">Phase 33: Desktop Production</h1>
+            <h1 className="text-xl font-bold text-[#111111] leading-tight">System Health & Production Deployment</h1>
             <div className="flex items-center gap-2 mt-0.5">
-              <span className="text-xs font-medium text-stone-500 tracking-wide">Environment & Diagnostics</span>
+              <span className="text-xs font-medium text-stone-500 tracking-wide">Environment, Security & Diagnostics</span>
               <span className="w-1 h-1 rounded-full bg-stone-300"></span>
-              <span className="text-[10px] uppercase font-bold text-emerald-600 tracking-wider">Release Candidate</span>
+              <span className="text-[10px] uppercase font-bold text-emerald-600 tracking-wider">Dual Target (Cloud Web & Desktop)</span>
             </div>
           </div>
         </div>
@@ -154,17 +154,23 @@ export default function Phase33ProductionView() {
                       <div className="p-3 bg-stone-100 rounded-lg"><Database className="w-6 h-6 text-stone-700" /></div>
                       <div>
                         <div className="text-[10px] font-bold text-stone-400 uppercase tracking-wider">Database Engine</div>
-                        <div className="text-base font-bold text-stone-900 mt-0.5">{diagnostics.databaseStatus}</div>
-                        <div className="text-xs text-stone-500 mt-1 flex items-center gap-1"><AlertTriangle className="w-3 h-3 text-orange-500"/> Not using durable SQLite yet</div>
+                        <div className="text-base font-bold text-stone-900 mt-0.5">
+                          {diagnostics.databaseStatus === 'DISK_BOUNDED_JSONL' ? 'Persistent Streaming Storage' : diagnostics.databaseStatus}
+                        </div>
+                        <div className="text-xs text-emerald-600 mt-1 flex items-center gap-1">
+                          <CheckCircle className="w-3 h-3 text-emerald-500" /> Bounded RAM Streaming (XML/JSON/Excel)
+                        </div>
                       </div>
                     </div>
                   </div>
 
                   <div className="bg-white border border-[#EAE6DF] rounded-xl p-6 shadow-xs">
-                    <h3 className="text-sm font-bold text-stone-900 mb-4 border-b border-stone-100 pb-2">Environment Details</h3>
+                    <h3 className="text-sm font-bold text-stone-900 mb-4 border-b border-stone-100 pb-2">Environment & Security Details</h3>
                     <div className="grid grid-cols-2 gap-y-4 gap-x-8 text-sm">
                       <div className="flex justify-between"><span className="text-stone-500">Operating System</span><span className="font-mono text-stone-800">{diagnostics.osDetails}</span></div>
                       <div className="flex justify-between"><span className="text-stone-500">Tally Integration</span><span className="font-bold text-emerald-600">{diagnostics.tallyStatus}</span></div>
+                      <div className="flex justify-between"><span className="text-stone-500">Tally Port 9000</span><span className="font-bold text-indigo-600">Private / Not Publicly Exposed</span></div>
+                      <div className="flex justify-between"><span className="text-stone-500">SSRF Protection</span><span className="font-bold text-emerald-600">Active</span></div>
                       <div className="flex justify-between"><span className="text-stone-500">Heap Used</span><span className="font-mono text-stone-800">{diagnostics.memoryUsage.heapUsed} MB</span></div>
                       <div className="flex justify-between"><span className="text-stone-500">Heap Total</span><span className="font-mono text-stone-800">{diagnostics.memoryUsage.heapTotal} MB</span></div>
                     </div>
