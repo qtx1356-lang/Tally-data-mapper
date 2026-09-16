@@ -1,9 +1,0 @@
-{
-  "fileType": "JSON",
-  "fileName": "small_test.json",
-  "fileSize": 512000,
-  "rawSampleData": {
-    "vouchers": []
-  },
-  "detectedEntities": []
-}

@@ -110,8 +110,8 @@ The web backend exposes standard production health endpoints:
 | `HOST` | `0.0.0.0` | Bind host for HTTP ingress. |
 | `NODE_ENV` | `production` | Runtimes switch: development uses Vite dev middleware; production serves compiled `dist/`. |
 | `EXFIN_MODE` | `web` | Operational mode (`web` or `desktop`). |
-| `DATABASE_URL` | *(Optional)* | PostgreSQL connection string for Web Mode persistent storage (`postgres://user:pass@host:5432/db`). If omitted, local disk storage (`data/offline_datasets`) is used. |
-| `STORAGE_MODE` | `auto` | Storage driver selection: `auto`, `postgres`, or `local`. In `auto` mode with `EXFIN_MODE=web` and `DATABASE_URL` set, PostgreSQL is used. |
+| `STORAGE_MODE` | `postgres` (web+prod) / `local` (desktop) | Storage driver: **WEB + PRODUCTION: `STORAGE_MODE=postgres` (`DATABASE_URL=REQUIRED`)**. **DESKTOP/LOCAL: `STORAGE_MODE=local` (`DATABASE_URL=not required`)**. In Web Production mode, setting `STORAGE_MODE=local` causes a hard startup failure. |
+| `DATABASE_URL` | *(Required for Web Prod)* | PostgreSQL connection string (`postgres://user:pass@host:5432/db`). **REQUIRED in WEB + production mode**. Missing or failed connection causes a hard startup failure (no silent or explicit fallback to local storage). |
 | `TALLY_BRIDGE_URL` | *(Optional)* | Explicit authorized bridge URL if bridging Tally through a secure gateway in Web Mode. |
 | `GEMINI_API_KEY` | *(Optional)* | Server-side API key for Gemini AI Audit Copilot. |
 
@@ -119,8 +119,15 @@ The web backend exposes standard production health endpoints:
 
 ## 5. Persistent Storage & Cloud Database
 
-- **Local Storage Provider (Desktop / Single-Node)**: Saves imported datasets, JSON summaries, and streaming NDJSON lines under `./data/offline_datasets`.
-- **PostgreSQL Storage Provider (Web Cloud / Multi-Node)**: Configured via `DATABASE_URL`. Stores dataset metadata, aggregates, vouchers, lines, and exceptions in PostgreSQL tables (`exfin_datasets`, `exfin_vouchers`, `exfin_exceptions`), allowing horizontal scaling across multiple container instances.
+- **WEB + PRODUCTION**:
+  - `STORAGE_MODE=postgres`
+  - `DATABASE_URL=REQUIRED`
+  - Uses PostgreSQL tables (`exfin_datasets`, `exfin_vouchers`, `exfin_exceptions`) for multi-node horizontally scaled persistence.
+  - Hard failure on startup if `DATABASE_URL` is missing, invalid, or unreachable. `LocalStorageProvider` is strictly forbidden and will never be used.
+- **DESKTOP / LOCAL**:
+  - `STORAGE_MODE=local`
+  - `DATABASE_URL=not required`
+  - Uses `LocalStorageProvider` (`./data/offline_datasets`) for single-user offline desktop or local development environments.
 
 ---
 
