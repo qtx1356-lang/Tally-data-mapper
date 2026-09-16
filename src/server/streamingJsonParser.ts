@@ -283,12 +283,42 @@ export class StreamingJsonParser {
         }
       }
 
+      // Helper to find first defined value across candidate keys
+      const firstVal = (...candidates: any[]) => {
+        for (const c of candidates) {
+          if (c !== undefined && c !== null && c !== '') return c;
+        }
+        return null;
+      };
+
       // Check if object is a candidate voucher object
-      const vchNumberRaw = v.voucherNumber || v.VOUCHERNUMBER || v.number || v.vchNo || v.VchNo || v.invoiceNo || v.InvoiceNo || null;
-      const vchTypeRaw = v.voucherType || v.VOUCHERTYPENAME || v.VOUCHERTYPE || v.type || v.Type || v.vchType || v.VchType || null;
-      const rawDate = v.date || v.DATE || v.Date || v.voucherDate || v.txDate || null;
-      const partyNameRaw = v.partyLedgerName || v.PARTYLEDGERNAME || v.party || v.Party || v.partyName || v.PartyName || null;
-      const narrationRaw = v.narration || v.NARRATION || v.Narration || null;
+      const vchNumberRaw = firstVal(
+        v.VoucherNumber, v.voucherNumber, v.VOUCHERNUMBER, v.Vouchernumber,
+        v.Voucher_Number, v.voucher_number, v.VoucherNo, v.voucherNo, v.VOUCHERNO,
+        v.VchNo, v.vchNo, v.VCHNO, v.InvoiceNo, v.invoiceNo, v.INVOICENO,
+        v.DocNo, v.docNo, v.Reference, v.reference, v.RefNo, v.refNo,
+        v.Number, v.number, v.id
+      );
+      
+      const vchTypeRaw = firstVal(
+        v.VoucherType, v.voucherType, v.VOUCHERTYPENAME, v.VOUCHERTYPE,
+        v.Vouchertype, v.Voucher_Type, v.voucher_type, v.VchType, v.vchType,
+        v.VCHTYPE, v.Type, v.type, v.TYPE, v.TransactionType, v.transactionType
+      );
+
+      const rawDate = firstVal(
+        v.Date, v.date, v.DATE, v.VoucherDate, v.voucherDate, v.VOUCHERDATE,
+        v.TxDate, v.txDate, v.TxnDate, v.txnDate, v.EffectiveDate, v.effectiveDate
+      );
+
+      const partyNameRaw = v.PartyLedgerName || v.partyLedgerName || v.PARTYLEDGERNAME ||
+                           v.PartyLedger || v.partyLedger || v.PARTYLEDGER ||
+                           v.PartyName || v.partyName || v.Party || v.party ||
+                           v.Particulars || v.particulars || v.customerName || null;
+
+      const narrationRaw = v.Narration || v.narration || v.NARRATION || 
+                            v.Remarks || v.remarks || v.REMARKS || 
+                            v.Description || v.description || v.Notes || v.notes || null;
 
       const hasEntries = Boolean(
         Array.isArray(v.entries) || (v.entries && typeof v.entries === 'object') ||
@@ -439,25 +469,36 @@ export class StreamingJsonParser {
       let vchCredit = 0;
 
       rawEntries.forEach((e: any, lIdx: number) => {
-        const lNameRaw = e.ledgerName || e.LEDGERNAME || e.name || e.account || e.LedgerName || 
-                         e.Party || e.PARTYLEDGERNAME || e.partyLedger || e.party || 
-                         e.Particulars || e.particulars || null;
+        const lNameRaw = e.LedgerName || e.ledgerName || e.LEDGERNAME || e.Ledgername || e.ledger_name || e.LEDGER_NAME ||
+                         e.Name || e.name || e.NAME ||
+                         e.Account || e.account || e.ACCOUNT || e.AccountName || e.accountName ||
+                         e.Party || e.party || e.PARTY || e.PartyName || e.partyName ||
+                         e.PartyLedger || e.partyLedger || e.PartyLedgerName || e.partyLedgerName || e.PARTYLEDGERNAME ||
+                         e.Particulars || e.particulars || e.PARTICULARS ||
+                         e.HeadOfAccount || e.headOfAccount || null;
         const lName = lNameRaw ? String(lNameRaw).trim() : null;
 
-        const eAmtRaw = e.amount !== undefined ? e.amount : 
+        const eAmtRaw = e.Amount !== undefined ? e.Amount : 
+                        (e.amount !== undefined ? e.amount : 
                         (e.AMOUNT !== undefined ? e.AMOUNT : 
-                        (e.Amount !== undefined ? e.Amount : 
+                        (e.RawAmount !== undefined ? e.RawAmount : 
+                        (e.rawAmount !== undefined ? e.rawAmount : 
+                        (e.Total !== undefined ? e.Total : 
                         (e.total !== undefined ? e.total : 
-                        (e.netAmount !== undefined ? e.netAmount : e.rawAmount))));
+                        (e.NetAmount !== undefined ? e.NetAmount : 
+                        (e.netAmount !== undefined ? e.netAmount : 
+                        (e.Value !== undefined ? e.Value :
+                        (e.value !== undefined ? e.value :
+                        (e.Amt !== undefined ? e.Amt : e.amt)))))))))));
 
         // Strict Centralized Normalization with ZERO JS Truthiness Hazards
         const norm = normalizeDebitCredit({
-          isDebit: e.isDebit,
-          isCredit: e.isCredit,
-          isDeemedPositive: e.isDeemedPositive !== undefined ? e.isDeemedPositive : e.ISDEEMEDPOSITIVE,
-          type: e.type !== undefined ? e.type : (e.TYPE !== undefined ? e.TYPE : (e.drCr || e.DR_CR || e.dr_cr)),
-          debitAmount: e.debit !== undefined ? e.debit : (e.DEBIT !== undefined ? e.DEBIT : (e.debitAmount !== undefined ? e.debitAmount : e.Debit)),
-          creditAmount: e.credit !== undefined ? e.credit : (e.CREDIT !== undefined ? e.CREDIT : (e.creditAmount !== undefined ? e.creditAmount : e.Credit)),
+          isDebit: e.IsDebit !== undefined ? e.IsDebit : (e.isDebit !== undefined ? e.isDebit : (e.ISDEBIT !== undefined ? e.ISDEBIT : e.is_debit)),
+          isCredit: e.IsCredit !== undefined ? e.IsCredit : (e.isCredit !== undefined ? e.isCredit : (e.ISCREDIT !== undefined ? e.ISCREDIT : e.is_credit)),
+          isDeemedPositive: e.IsDeemedPositive !== undefined ? e.IsDeemedPositive : (e.isDeemedPositive !== undefined ? e.isDeemedPositive : (e.ISDEEMEDPOSITIVE !== undefined ? e.ISDEEMEDPOSITIVE : e.is_deemed_positive)),
+          type: e.Type !== undefined ? e.Type : (e.type !== undefined ? e.type : (e.TYPE !== undefined ? e.TYPE : (e.drCr || e.DrCr || e.DR_CR || e.dr_cr))),
+          debitAmount: e.Debit !== undefined ? e.Debit : (e.debit !== undefined ? e.debit : (e.DEBIT !== undefined ? e.DEBIT : (e.debitAmount !== undefined ? e.debitAmount : e.DebitAmount))),
+          creditAmount: e.Credit !== undefined ? e.Credit : (e.credit !== undefined ? e.credit : (e.CREDIT !== undefined ? e.CREDIT : (e.creditAmount !== undefined ? e.creditAmount : e.CreditAmount))),
           rawAmount: eAmtRaw,
           fileFormatHint: 'JSON'
         });

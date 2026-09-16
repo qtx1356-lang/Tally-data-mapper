@@ -19,21 +19,51 @@ export type AccountingDirection = 'Debit' | 'Credit' | 'UNKNOWN';
 export interface DebitCreditNormalizationInput {
   // Explicit boolean or string flags
   isDebit?: any;
+  IsDebit?: any;
+  ISDEBIT?: any;
+  is_debit?: any;
+
   isCredit?: any;
+  IsCredit?: any;
+  ISCREDIT?: any;
+  is_credit?: any;
+
   isDeemedPositive?: any;
+  IsDeemedPositive?: any;
   ISDEEMEDPOSITIVE?: any;
+  is_deemed_positive?: any;
 
   // Type or dr/cr text indicator (e.g. "Dr", "Cr", "Debit", "Credit", "D", "C")
   type?: any;
+  Type?: any;
+  TYPE?: any;
   drCr?: any;
+  DrCr?: any;
+  DR_CR?: any;
+  dr_cr?: any;
 
   // Explicit debit/credit numeric or string amounts (e.g. from separate columns or fields)
   debitAmount?: any;
+  DebitAmount?: any;
+  debit?: any;
+  Debit?: any;
+  DEBIT?: any;
+
   creditAmount?: any;
+  CreditAmount?: any;
+  credit?: any;
+  Credit?: any;
+  CREDIT?: any;
 
   // General raw amount (could be number or string e.g. "15000", "-15000", "15000 Dr")
   rawAmount?: any;
+  RawAmount?: any;
+  RAWAMOUNT?: any;
+  amount?: any;
+  Amount?: any;
+  AMOUNT?: any;
   sourceAmount?: any;
+  SourceAmount?: any;
 
   // Optional contextual file format hint ('XML' | 'JSON' | 'EXCEL')
   fileFormatHint?: 'XML' | 'JSON' | 'EXCEL';
@@ -162,30 +192,36 @@ export function parseRawSignedNumber(val: any): number | null {
  * 8. Missing / undetermined direction => UNKNOWN, isDebit = null, reviewRequired = true.
  */
 export function normalizeDebitCredit(input: DebitCreditNormalizationInput): DebitCreditNormalizationResult {
+  const isDebitInput = input.isDebit !== undefined ? input.isDebit : (input.IsDebit !== undefined ? input.IsDebit : (input.ISDEBIT !== undefined ? input.ISDEBIT : input.is_debit));
+  const isCreditInput = input.isCredit !== undefined ? input.isCredit : (input.IsCredit !== undefined ? input.IsCredit : (input.ISCREDIT !== undefined ? input.ISCREDIT : input.is_credit));
+  const deemedRaw = input.isDeemedPositive !== undefined ? input.isDeemedPositive : (input.IsDeemedPositive !== undefined ? input.IsDeemedPositive : (input.ISDEEMEDPOSITIVE !== undefined ? input.ISDEEMEDPOSITIVE : input.is_deemed_positive));
+  const rawTypeInput = input.type !== undefined ? input.type : (input.Type !== undefined ? input.Type : (input.TYPE !== undefined ? input.TYPE : (input.drCr !== undefined ? input.drCr : (input.DrCr !== undefined ? input.DrCr : (input.DR_CR !== undefined ? input.DR_CR : input.dr_cr)))));
+  const debitAmountInput = input.debitAmount !== undefined ? input.debitAmount : (input.DebitAmount !== undefined ? input.DebitAmount : (input.debit !== undefined ? input.debit : (input.Debit !== undefined ? input.Debit : input.DEBIT)));
+  const creditAmountInput = input.creditAmount !== undefined ? input.creditAmount : (input.CreditAmount !== undefined ? input.CreditAmount : (input.credit !== undefined ? input.credit : (input.Credit !== undefined ? input.Credit : input.CREDIT)));
+  const rawAmountInput = input.rawAmount !== undefined ? input.rawAmount : (input.RawAmount !== undefined ? input.RawAmount : (input.RAWAMOUNT !== undefined ? input.RAWAMOUNT : (input.amount !== undefined ? input.amount : (input.Amount !== undefined ? input.Amount : (input.AMOUNT !== undefined ? input.AMOUNT : (input.sourceAmount !== undefined ? input.sourceAmount : input.SourceAmount))))));
+
   // Step 1: Preserve original source amount exactly as provided
   let sourceAmount: any = null;
-  if (input.rawAmount !== undefined) {
-    sourceAmount = input.rawAmount;
-  } else if (input.sourceAmount !== undefined) {
-    sourceAmount = input.sourceAmount;
-  } else if (input.debitAmount !== undefined && input.debitAmount !== null && input.debitAmount !== '') {
-    sourceAmount = input.debitAmount;
-  } else if (input.creditAmount !== undefined && input.creditAmount !== null && input.creditAmount !== '') {
-    sourceAmount = input.creditAmount;
+  if (rawAmountInput !== undefined) {
+    sourceAmount = rawAmountInput;
+  } else if (debitAmountInput !== undefined && debitAmountInput !== null && debitAmountInput !== '') {
+    sourceAmount = debitAmountInput;
+  } else if (creditAmountInput !== undefined && creditAmountInput !== null && creditAmountInput !== '') {
+    sourceAmount = creditAmountInput;
   }
 
   // Step 2: Compute normalized numeric magnitude (absolute value)
   let normalizedAmount: number | null = parseNumericMagnitude(sourceAmount);
-  const drNum = parseNumericMagnitude(input.debitAmount);
-  const crNum = parseNumericMagnitude(input.creditAmount);
+  const drNum = parseNumericMagnitude(debitAmountInput);
+  const crNum = parseNumericMagnitude(creditAmountInput);
   if (normalizedAmount === null) {
     if (drNum !== null && drNum > 0) normalizedAmount = drNum;
     else if (crNum !== null && crNum > 0) normalizedAmount = crNum;
   }
 
   // Rule 1: Explicit isDebit flag
-  if (input.isDebit !== undefined && input.isDebit !== null && input.isDebit !== '') {
-    const boolVal = parseExplicitBoolean(input.isDebit);
+  if (isDebitInput !== undefined && isDebitInput !== null && isDebitInput !== '') {
+    const boolVal = parseExplicitBoolean(isDebitInput);
     if (boolVal === true) {
       return {
         direction: 'Debit',
@@ -214,8 +250,8 @@ export function normalizeDebitCredit(input: DebitCreditNormalizationInput): Debi
   }
 
   // Rule 2: Explicit isCredit flag
-  if (input.isCredit !== undefined && input.isCredit !== null && input.isCredit !== '') {
-    const boolVal = parseExplicitBoolean(input.isCredit);
+  if (isCreditInput !== undefined && isCreditInput !== null && isCreditInput !== '') {
+    const boolVal = parseExplicitBoolean(isCreditInput);
     if (boolVal === true) {
       return {
         direction: 'Credit',
@@ -244,7 +280,6 @@ export function normalizeDebitCredit(input: DebitCreditNormalizationInput): Debi
   }
 
   // Rule 3: Tally ISDEEMEDPOSITIVE / isDeemedPositive
-  const deemedRaw = input.ISDEEMEDPOSITIVE !== undefined ? input.ISDEEMEDPOSITIVE : input.isDeemedPositive;
   if (deemedRaw !== undefined && deemedRaw !== null && deemedRaw !== '') {
     const boolVal = parseExplicitBoolean(deemedRaw);
     if (boolVal === true) {
@@ -280,7 +315,7 @@ export function normalizeDebitCredit(input: DebitCreditNormalizationInput): Debi
       direction: 'Debit',
       isDebit: true,
       isDeemedPositive: null,
-      sourceAmount: sourceAmount !== null ? sourceAmount : { debit: input.debitAmount, credit: input.creditAmount },
+      sourceAmount: sourceAmount !== null ? sourceAmount : { debit: debitAmountInput, credit: creditAmountInput },
       normalizedAmount: drNum,
       ruleApplied: 'Explicit DEBIT column amount > 0 while CREDIT is 0/absent (Debit)',
       confidence: 'HIGH',
@@ -293,7 +328,7 @@ export function normalizeDebitCredit(input: DebitCreditNormalizationInput): Debi
       direction: 'Credit',
       isDebit: false,
       isDeemedPositive: null,
-      sourceAmount: sourceAmount !== null ? sourceAmount : { debit: input.debitAmount, credit: input.creditAmount },
+      sourceAmount: sourceAmount !== null ? sourceAmount : { debit: debitAmountInput, credit: creditAmountInput },
       normalizedAmount: crNum,
       ruleApplied: 'Explicit CREDIT column amount > 0 while DEBIT is 0/absent (Credit)',
       confidence: 'HIGH',
@@ -306,7 +341,7 @@ export function normalizeDebitCredit(input: DebitCreditNormalizationInput): Debi
       direction: 'UNKNOWN',
       isDebit: null,
       isDeemedPositive: null,
-      sourceAmount: sourceAmount !== null ? sourceAmount : { debit: input.debitAmount, credit: input.creditAmount },
+      sourceAmount: sourceAmount !== null ? sourceAmount : { debit: debitAmountInput, credit: creditAmountInput },
       normalizedAmount: drNum,
       ruleApplied: 'Ambiguous: line contains positive values in both DEBIT and CREDIT columns',
       confidence: 'UNKNOWN',
@@ -316,7 +351,7 @@ export function normalizeDebitCredit(input: DebitCreditNormalizationInput): Debi
   }
 
   // Rule 5: Type / DrCr indicator string
-  const rawType = input.type !== undefined && input.type !== null && input.type !== '' ? input.type : input.drCr;
+  const rawType = rawTypeInput;
   if (rawType !== undefined && rawType !== null && rawType !== '') {
     const t = String(rawType).trim().toUpperCase();
     if (t === 'DR' || t === 'DEBIT' || t === 'D') {

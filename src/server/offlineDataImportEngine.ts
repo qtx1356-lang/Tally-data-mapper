@@ -268,6 +268,27 @@ export class OfflineDataImportEngine {
       if (!isNaN(new Date(iso).getTime())) return iso;
     }
 
+    // DD-MMM-YYYY or D-MMM-YYYY or DD-MMM-YY (e.g. 1-Apr-2024, 01-Apr-2024, 1-Apr-24, 31-Mar-2025)
+    const dMmmMatch = trimmed.match(/^(\d{1,2})[-/ ]([a-zA-Z]{3,9})[-/ ](\d{2,4})$/);
+    if (dMmmMatch) {
+      const months: Record<string, string> = {
+        jan: '01', feb: '02', mar: '03', apr: '04', may: '05', jun: '06',
+        jul: '07', aug: '08', sep: '09', oct: '10', nov: '11', dec: '12'
+      };
+      const mStr = dMmmMatch[2].substring(0, 3).toLowerCase();
+      const mNum = months[mStr];
+      if (mNum) {
+        let yr = dMmmMatch[3];
+        if (yr.length === 2) {
+          const yrNum = parseInt(yr, 10);
+          yr = (yrNum < 50 ? '20' : '19') + yr.padStart(2, '0');
+        }
+        const day = dMmmMatch[1].padStart(2, '0');
+        const iso = `${yr}-${mNum}-${day}`;
+        if (!isNaN(new Date(iso).getTime())) return iso;
+      }
+    }
+
     // Direct Date parse check
     const d = new Date(trimmed);
     if (!isNaN(d.getTime())) {
@@ -654,6 +675,171 @@ export class OfflineDataImportEngine {
   }
 
   /**
+   * Helper: Comprehensive Financial Year detection from JSON objects, company metadata, and headers
+   */
+  private detectFinancialYearFromJson(parsed: any): {
+    from: string | null;
+    to: string | null;
+    isDetected: boolean;
+    source: string;
+    evidence?: {
+      sourceType: ImportFileFormat;
+      sourcePath: string;
+      sourceField: string;
+      sourceValue: string;
+    };
+  } {
+    if (!parsed || typeof parsed !== 'object') {
+      return { from: null, to: null, isDetected: false, source: 'Not Detected in Source Data' };
+    }
+
+    const candidateObjects: { obj: any; path: string }[] = [
+      { obj: parsed, path: '$' }
+    ];
+
+    if (parsed.company && typeof parsed.company === 'object') candidateObjects.push({ obj: parsed.company, path: '$.company' });
+    if (parsed.Company && typeof parsed.Company === 'object') candidateObjects.push({ obj: parsed.Company, path: '$.Company' });
+    if (parsed.COMPANY && typeof parsed.COMPANY === 'object') candidateObjects.push({ obj: parsed.COMPANY, path: '$.COMPANY' });
+    if (parsed.companyInfo && typeof parsed.companyInfo === 'object') candidateObjects.push({ obj: parsed.companyInfo, path: '$.companyInfo' });
+    if (parsed.CompanyInfo && typeof parsed.CompanyInfo === 'object') candidateObjects.push({ obj: parsed.CompanyInfo, path: '$.CompanyInfo' });
+    if (parsed.header && typeof parsed.header === 'object') candidateObjects.push({ obj: parsed.header, path: '$.header' });
+    if (parsed.Header && typeof parsed.Header === 'object') candidateObjects.push({ obj: parsed.Header, path: '$.Header' });
+    if (parsed.metadata && typeof parsed.metadata === 'object') candidateObjects.push({ obj: parsed.metadata, path: '$.metadata' });
+    if (parsed.Metadata && typeof parsed.Metadata === 'object') candidateObjects.push({ obj: parsed.Metadata, path: '$.Metadata' });
+    if (parsed.ENVELOPE && typeof parsed.ENVELOPE === 'object') {
+      candidateObjects.push({ obj: parsed.ENVELOPE, path: '$.ENVELOPE' });
+      if (parsed.ENVELOPE.HEADER && typeof parsed.ENVELOPE.HEADER === 'object') candidateObjects.push({ obj: parsed.ENVELOPE.HEADER, path: '$.ENVELOPE.HEADER' });
+      if (parsed.ENVELOPE.BODY && typeof parsed.ENVELOPE.BODY === 'object') candidateObjects.push({ obj: parsed.ENVELOPE.BODY, path: '$.ENVELOPE.BODY' });
+    }
+
+    const parseFyString = (str: string, fieldPath: string, fieldName: string) => {
+      const clean = str.trim().replace(/^FY\s*[:=]?\s*/i, '').replace(/^F\.Y\.\s*[:=]?\s*/i, '').replace(/^Financial\s*Year\s*[:=]?\s*/i, '').trim();
+      
+      // Check year range format e.g. "2024-2025", "2024-25", "24-25", "2024 to 2025", "2024 - 2025", "2024/2025", "2024/25"
+      const yrMatch = clean.match(/^(\d{2,4})\s*(?:[-–/]|to)\s*(\d{2,4})$/i);
+      if (yrMatch) {
+        let y1 = parseInt(yrMatch[1], 10);
+        let y2 = parseInt(yrMatch[2], 10);
+        if (y1 < 100) y1 += 2000;
+        if (y2 < 100) y2 += 2000;
+        if (y2 < y1) y2 = y1 + 1;
+        const from = `${y1}-04-01`;
+        const to = `${y2}-03-31`;
+        return {
+          from,
+          to,
+          isDetected: true,
+          source: `JSON Schema String (${fieldPath})`,
+          evidence: {
+            sourceType: 'JSON' as ImportFileFormat,
+            sourcePath: fieldPath,
+            sourceField: fieldName,
+            sourceValue: str
+          }
+        };
+      }
+
+      // Check full date range e.g. "20240401 to 20250331", "2024-04-01 - 2025-03-31", "01-04-2024 to 31-03-2025"
+      const dateParts = clean.split(/\s*(?:[-–]|to)\s*/i);
+      if (dateParts.length === 2) {
+        const p1 = this.parseTallyDate(dateParts[0]);
+        const p2 = this.parseTallyDate(dateParts[1]);
+        if (p1 && p2) {
+          return {
+            from: p1,
+            to: p2,
+            isDetected: true,
+            source: `JSON Schema Date Range (${fieldPath})`,
+            evidence: {
+              sourceType: 'JSON' as ImportFileFormat,
+              sourcePath: fieldPath,
+              sourceField: fieldName,
+              sourceValue: str
+            }
+          };
+        }
+      }
+
+      return null;
+    };
+
+    for (const { obj, path } of candidateObjects) {
+      // 1. Direct FY object / string fields
+      const fyKeys = ['financialYear', 'FinancialYear', 'FINANCIALYEAR', 'Financial Year', 'financial year', 'Financial_Year', 'financial_year', 'FY', 'fy', 'FYear', 'fYear', 'fyear', 'F_YEAR', 'f_year'];
+      for (const k of fyKeys) {
+        if (obj[k] !== undefined && obj[k] !== null) {
+          const val = obj[k];
+          const curPath = path === '$' ? `$.${k}` : `${path}.${k}`;
+          if (typeof val === 'object' && !Array.isArray(val)) {
+            const rawFrom = val.from || val.From || val.FROM || val.startDate || val.StartDate || val.STARTDATE || val.fromDate || val.FromDate || val.FROMDATE || val.startingFrom || val.StartingFrom || val.STARTINGFROM;
+            const rawTo = val.to || val.To || val.TO || val.endDate || val.EndDate || val.ENDDATE || val.toDate || val.ToDate || val.TODATE || val.endingAt || val.EndingAt || val.ENDINGAT;
+            const from = this.parseTallyDate(rawFrom);
+            const to = this.parseTallyDate(rawTo);
+            if (from && to) {
+              return {
+                from,
+                to,
+                isDetected: true,
+                source: `JSON Schema Object (${curPath})`,
+                evidence: {
+                  sourceType: 'JSON' as ImportFileFormat,
+                  sourcePath: curPath,
+                  sourceField: `${k}.from / to`,
+                  sourceValue: `${rawFrom} - ${rawTo}`
+                }
+              };
+            }
+          } else if (typeof val === 'string' && val.trim()) {
+            const parsedRes = parseFyString(val, curPath, k);
+            if (parsedRes) return parsedRes;
+          }
+        }
+      }
+
+      // 2. Separate start/from and end/to fields
+      const fromKeys = ['FROMDATE', 'fromDate', 'FromDate', 'from_date', 'STARTDATE', 'startDate', 'StartDate', 'start_date', 'STARTINGFROM', 'startingFrom', 'StartingFrom', 'starting_from', 'financialYearFrom', 'FinancialYearFrom', 'financial_year_from', 'fyFrom', 'FYFrom', 'from', 'From'];
+      const toKeys = ['TODATE', 'toDate', 'ToDate', 'to_date', 'ENDDATE', 'endDate', 'EndDate', 'end_date', 'ENDINGAT', 'endingAt', 'EndingAt', 'ending_at', 'financialYearTo', 'FinancialYearTo', 'financial_year_to', 'fyTo', 'FYTo', 'to', 'To'];
+
+      let foundFromKey: string | null = null;
+      let foundToKey: string | null = null;
+      for (const fk of fromKeys) {
+        if (obj[fk] !== undefined && obj[fk] !== null && String(obj[fk]).trim()) {
+          foundFromKey = fk;
+          break;
+        }
+      }
+      for (const tk of toKeys) {
+        if (obj[tk] !== undefined && obj[tk] !== null && String(obj[tk]).trim()) {
+          foundToKey = tk;
+          break;
+        }
+      }
+
+      if (foundFromKey && foundToKey) {
+        const from = this.parseTallyDate(String(obj[foundFromKey]));
+        const to = this.parseTallyDate(String(obj[foundToKey]));
+        if (from && to) {
+          const curPath = path === '$' ? `$.${foundFromKey}` : `${path}.${foundFromKey}`;
+          return {
+            from,
+            to,
+            isDetected: true,
+            source: `JSON Schema Period Fields (${curPath}, ${foundToKey})`,
+            evidence: {
+              sourceType: 'JSON' as ImportFileFormat,
+              sourcePath: curPath,
+              sourceField: `${foundFromKey} / ${foundToKey}`,
+              sourceValue: `${obj[foundFromKey]} - ${obj[foundToKey]}`
+            }
+          };
+        }
+      }
+    }
+
+    return { from: null, to: null, isDetected: false, source: 'Not Detected in Source Data' };
+  }
+
+  /**
    * Parse JSON Data with non-fabricated extraction and deep path traceability
    */
   public parseJsonData(jsonInput: string | any, fileName: string, explicitFileSize?: number): { preview: RawParsedPreview; rawRecords: any } {
@@ -702,20 +888,21 @@ export class OfflineDataImportEngine {
       const keys = Object.keys(o).map(k => k.toLowerCase().replace(/[^a-z0-9]/g, ''));
       const hasLedgerName = keys.some(k => 
         k === 'ledgername' || k === 'name' || k === 'account' || k === 'party' || 
-        k === 'partyledgername' || k === 'partyledger' || k === 'particulars' || k === 'ledger'
+        k === 'partyledgername' || k === 'partyledger' || k === 'particulars' || k === 'ledger' ||
+        k === 'accountname' || k === 'headofaccount'
       );
       const hasAmount = keys.some(k => 
-        k === 'amount' || k === 'total' || k === 'amt' || k === 'rawamount' || k === 'netamount'
+        k === 'amount' || k === 'total' || k === 'amt' || k === 'rawamount' || k === 'netamount' || k === 'value'
       );
       const hasDebitCredit = keys.some(k => 
-        k === 'isdeemedpositive' || k === 'isdebit' || k === 'iscredit' || k === 'type' || k === 'drcr'
+        k === 'isdeemedpositive' || k === 'isdebit' || k === 'iscredit' || k === 'type' || k === 'drcr' || k === 'debit' || k === 'credit'
       );
-      return hasLedgerName || (hasAmount && hasDebitCredit);
+      return hasLedgerName || (hasAmount && hasDebitCredit) || (hasAmount && hasLedgerName);
     };
 
     // Recursive helper to locate raw ledger entries from direct arrays, object-wrapped arrays, or nested structures
     const locateRawLedgerEntries = (obj: any, path: string, depth: number = 0): { items: { item: any; path: string }[]; path: string } | null => {
-      if (depth > 4 || !obj || typeof obj !== 'object') return null;
+      if (depth > 5 || !obj || typeof obj !== 'object') return null;
 
       // Handle direct array if obj itself is an array
       if (Array.isArray(obj)) {
@@ -724,7 +911,7 @@ export class OfflineDataImportEngine {
           let lineObj = rawLine;
           let linePath = `${path}[${lIdx}]`;
           if (lineObj && typeof lineObj === 'object' && !Array.isArray(lineObj)) {
-            for (const wrapKey of ['LEDGERENTRY', 'ledgerEntry', 'entry', 'ENTRY', 'line', 'LINE']) {
+            for (const wrapKey of ['LEDGERENTRY', 'ledgerEntry', 'LedgerEntry', 'entry', 'ENTRY', 'Entry', 'line', 'LINE', 'Line']) {
               if (lineObj[wrapKey] && typeof lineObj[wrapKey] === 'object' && !Array.isArray(lineObj[wrapKey])) {
                 lineObj = lineObj[wrapKey];
                 linePath = `${linePath}.${wrapKey}`;
@@ -740,6 +927,7 @@ export class OfflineDataImportEngine {
       const CANDIDATE_KEYS = [
         'ALLLEDGERENTRIES',
         'allLedgerEntries',
+        'AllLedgerEntries',
         'ALL_LEDGER_ENTRIES',
         'all_ledger_entries',
         'ALLLEDGERENTRIES.LIST',
@@ -752,10 +940,19 @@ export class OfflineDataImportEngine {
         'ledger_entries',
         'entries',
         'Entries',
+        'ENTRIES',
         'lines',
         'Lines',
+        'LINES',
         'ledgerLines',
-        'LedgerLines'
+        'LedgerLines',
+        'LEDGERLINES',
+        'accountingAllocations',
+        'ACCOUNTINGALLOCATIONS',
+        'ACCOUNTINGALLOCATIONS.LIST',
+        'allInventoryEntries',
+        'ALLINVENTORYENTRIES',
+        'ALLINVENTORYENTRIES.LIST'
       ];
 
       const objKeys = Object.keys(obj);
@@ -777,7 +974,7 @@ export class OfflineDataImportEngine {
               let lineObj = rawLine;
               let linePath = `${candPath}[${lIdx}]`;
               if (lineObj && typeof lineObj === 'object' && !Array.isArray(lineObj)) {
-                for (const wrapKey of ['LEDGERENTRY', 'ledgerEntry', 'entry', 'ENTRY', 'line', 'LINE']) {
+                for (const wrapKey of ['LEDGERENTRY', 'ledgerEntry', 'LedgerEntry', 'entry', 'ENTRY', 'Entry', 'line', 'LINE', 'Line']) {
                   if (lineObj[wrapKey] && typeof lineObj[wrapKey] === 'object' && !Array.isArray(lineObj[wrapKey])) {
                     lineObj = lineObj[wrapKey];
                     linePath = `${linePath}.${wrapKey}`;
@@ -791,10 +988,17 @@ export class OfflineDataImportEngine {
           }
 
           if (typeof val === 'object' && val !== null) {
-            // Check if val contains nested ledger entry collections (e.g. ALLLEDGERENTRIES: { LEDGERENTRIES: [...] })
+            // Check if val contains nested ledger entry collections (e.g. ALLLEDGERENTRIES: { LEDGERENTRIES: [...] } or { LIST: [...] })
             const nestedRes = locateRawLedgerEntries(val, candPath, depth + 1);
             if (nestedRes && nestedRes.items.length > 0) {
               return nestedRes;
+            }
+
+            // Check if val is a keyed map of entries e.g. { "0": {...}, "1": {...} }
+            const subVals = Object.values(val);
+            if (subVals.length > 0 && subVals.every(v => isLedgerEntryObject(v))) {
+              const items = Object.entries(val).map(([k, v]) => ({ item: v, path: `${candPath}['${k}']` }));
+              return { items, path: candPath };
             }
 
             // Check if val itself is a single ledger entry object
@@ -845,26 +1049,48 @@ export class OfflineDataImportEngine {
           }
         }
 
-        const vNumRaw = vch.voucherNumber || vch.VOUCHERNUMBER || vch.vchNo || vch.invoiceNo || vch.VchNo || vch.InvoiceNo || 
-                        item.voucherNumber || item.VOUCHERNUMBER || item.vchNo || item.invoiceNo || null;
-        const vNum = vNumRaw ? String(vNumRaw).trim() : null;
+        // Helper to find first defined value across candidate keys
+        const firstVal = (...candidates: any[]) => {
+          for (const c of candidates) {
+            if (c !== undefined && c !== null && c !== '') return c;
+          }
+          return null;
+        };
 
-        const vTypeRaw = vch.voucherType || vch.VOUCHERTYPENAME || vch.type || vch.vchType || vch.VchType || 
-                         item.voucherType || item.VOUCHERTYPENAME || null;
-        const vType = vTypeRaw ? String(vTypeRaw).trim() : null;
+        // Voucher Number / Reference
+        const vNumRaw = firstVal(
+          vch.VoucherNumber, vch.voucherNumber, vch.VOUCHERNUMBER, vch.Vouchernumber,
+          vch.Voucher_Number, vch.voucher_number, vch.VoucherNo, vch.voucherNo, vch.VOUCHERNO,
+          vch.VchNo, vch.vchNo, vch.VCHNO, vch.InvoiceNo, vch.invoiceNo, vch.INVOICENO,
+          vch.DocNo, vch.docNo, vch.Reference, vch.reference, vch.RefNo, vch.refNo,
+          vch.Number, vch.number, vch.id,
+          item.VoucherNumber, item.voucherNumber, item.VOUCHERNUMBER, item.vchNo, item.VchNo, item.invoiceNo
+        );
+        const vNum = vNumRaw !== null ? String(vNumRaw).trim() : null;
 
-        const rawDate = vch.date || vch.DATE || vch.voucherDate || vch.txDate || vch.Date || vch.VoucherDate || item.date || item.DATE || null;
+        // Voucher Type
+        const vTypeRaw = firstVal(
+          vch.VoucherType, vch.voucherType, vch.VOUCHERTYPENAME, vch.VOUCHERTYPE,
+          vch.Vouchertype, vch.Voucher_Type, vch.voucher_type, vch.VchType, vch.vchType,
+          vch.VCHTYPE, vch.Type, vch.type, vch.TYPE, vch.TransactionType, vch.transactionType,
+          item.VoucherType, item.voucherType, item.VOUCHERTYPENAME
+        );
+        const vType = vTypeRaw !== null ? String(vTypeRaw).trim() : null;
+
+        // Date
+        const rawDate = firstVal(
+          vch.Date, vch.date, vch.DATE, vch.VoucherDate, vch.voucherDate, vch.VOUCHERDATE,
+          vch.TxDate, vch.txDate, vch.TxnDate, vch.txnDate, vch.EffectiveDate, vch.effectiveDate,
+          item.Date, item.date, item.DATE
+        );
         const parsedDate = this.parseTallyDate(rawDate);
         if (parsedDate) extractedDates.push(parsedDate);
 
         // Header amount extraction
-        const rawHeaderAmt = vch.amount !== undefined ? vch.amount : 
-                             (vch.AMOUNT !== undefined ? vch.AMOUNT : 
-                             (vch.total !== undefined ? vch.total : 
-                             (vch.netAmount !== undefined ? vch.netAmount : 
-                             (vch.Total !== undefined ? vch.Total : 
-                             (vch.Amount !== undefined ? vch.Amount : 
-                             (item.amount !== undefined ? item.amount : (item.AMOUNT !== undefined ? item.AMOUNT : undefined)))))));
+        const rawHeaderAmt = firstVal(
+          vch.Amount, vch.amount, vch.AMOUNT, vch.total, vch.Total, vch.netAmount,
+          item.Amount, item.amount, item.AMOUNT
+        );
         let headerAmt: number | null = null;
         if (typeof rawHeaderAmt === 'number') {
           headerAmt = Math.abs(rawHeaderAmt);
@@ -883,25 +1109,36 @@ export class OfflineDataImportEngine {
           located.items.forEach(({ item: e, path: linePath }, lIdx) => {
             if (!e || typeof e !== 'object') return;
 
-            const lNameRaw = e.ledgerName || e.LEDGERNAME || e.name || e.account || e.LedgerName || 
-                             e.Party || e.PARTYLEDGERNAME || e.partyLedger || e.party || 
-                             e.Particulars || e.particulars || null;
+            const lNameRaw = e.LedgerName || e.ledgerName || e.LEDGERNAME || e.Ledgername || e.ledger_name || e.LEDGER_NAME ||
+                             e.Name || e.name || e.NAME ||
+                             e.Account || e.account || e.ACCOUNT || e.AccountName || e.accountName ||
+                             e.Party || e.party || e.PARTY || e.PartyName || e.partyName ||
+                             e.PartyLedger || e.partyLedger || e.PartyLedgerName || e.partyLedgerName || e.PARTYLEDGERNAME ||
+                             e.Particulars || e.particulars || e.PARTICULARS ||
+                             e.HeadOfAccount || e.headOfAccount || null;
             const lName = lNameRaw ? String(lNameRaw).trim() : null;
 
-            const eAmtRaw = e.amount !== undefined ? e.amount : 
+            const eAmtRaw = e.Amount !== undefined ? e.Amount : 
+                            (e.amount !== undefined ? e.amount : 
                             (e.AMOUNT !== undefined ? e.AMOUNT : 
-                            (e.Amount !== undefined ? e.Amount : 
+                            (e.RawAmount !== undefined ? e.RawAmount : 
+                            (e.rawAmount !== undefined ? e.rawAmount : 
+                            (e.Total !== undefined ? e.Total : 
                             (e.total !== undefined ? e.total : 
-                            (e.netAmount !== undefined ? e.netAmount : e.rawAmount))));
+                            (e.NetAmount !== undefined ? e.NetAmount : 
+                            (e.netAmount !== undefined ? e.netAmount : 
+                            (e.Value !== undefined ? e.Value :
+                            (e.value !== undefined ? e.value :
+                            (e.Amt !== undefined ? e.Amt : e.amt)))))))))));
 
             // Centralized Debit/Credit Normalization with zero JavaScript truthiness hazards
             const norm = normalizeDebitCredit({
-              isDebit: e.isDebit,
-              isCredit: e.isCredit,
-              isDeemedPositive: e.isDeemedPositive !== undefined ? e.isDeemedPositive : e.ISDEEMEDPOSITIVE,
-              type: e.type !== undefined ? e.type : (e.TYPE !== undefined ? e.TYPE : (e.drCr || e.DR_CR || e.dr_cr)),
-              debitAmount: e.debit !== undefined ? e.debit : (e.DEBIT !== undefined ? e.DEBIT : (e.debitAmount !== undefined ? e.debitAmount : e.Debit)),
-              creditAmount: e.credit !== undefined ? e.credit : (e.CREDIT !== undefined ? e.CREDIT : (e.creditAmount !== undefined ? e.creditAmount : e.Credit)),
+              isDebit: e.IsDebit !== undefined ? e.IsDebit : (e.isDebit !== undefined ? e.isDebit : (e.ISDEBIT !== undefined ? e.ISDEBIT : e.is_debit)),
+              isCredit: e.IsCredit !== undefined ? e.IsCredit : (e.isCredit !== undefined ? e.isCredit : (e.ISCREDIT !== undefined ? e.ISCREDIT : e.is_credit)),
+              isDeemedPositive: e.IsDeemedPositive !== undefined ? e.IsDeemedPositive : (e.isDeemedPositive !== undefined ? e.isDeemedPositive : (e.ISDEEMEDPOSITIVE !== undefined ? e.ISDEEMEDPOSITIVE : e.is_deemed_positive)),
+              type: e.Type !== undefined ? e.Type : (e.type !== undefined ? e.type : (e.TYPE !== undefined ? e.TYPE : (e.drCr || e.DrCr || e.DR_CR || e.dr_cr))),
+              debitAmount: e.Debit !== undefined ? e.Debit : (e.debit !== undefined ? e.debit : (e.DEBIT !== undefined ? e.DEBIT : (e.debitAmount !== undefined ? e.debitAmount : e.DebitAmount))),
+              creditAmount: e.Credit !== undefined ? e.Credit : (e.credit !== undefined ? e.credit : (e.CREDIT !== undefined ? e.CREDIT : (e.creditAmount !== undefined ? e.creditAmount : e.CreditAmount))),
               rawAmount: eAmtRaw,
               fileFormatHint: 'JSON'
             });
@@ -952,11 +1189,17 @@ export class OfflineDataImportEngine {
         const diff = Math.abs(totalDebit - totalCredit);
         const isBalanced = entries.length >= 2 && diff <= 0.05 && totalDebit > 0;
 
-        const partyLedger = vch.partyLedger || vch.PARTYLEDGERNAME || vch.party || vch.customerName || vch.Particulars || vch.particulars || 
-                            item.partyLedger || item.PARTYLEDGERNAME || item.party || 
+        const partyLedger = vch.PartyLedgerName || vch.partyLedgerName || vch.PARTYLEDGERNAME ||
+                            vch.PartyLedger || vch.partyLedger || vch.PARTYLEDGER ||
+                            vch.PartyName || vch.partyName || vch.Party || vch.party ||
+                            vch.Particulars || vch.particulars || vch.customerName ||
+                            item.PartyLedgerName || item.partyLedgerName || item.partyLedger || item.Party ||
                             (entries.length > 0 ? entries[0].ledgerName : null);
 
-        const narration = vch.narration || vch.NARRATION || vch.remarks || vch.description || item.narration || item.NARRATION || null;
+        const narration = vch.Narration || vch.narration || vch.NARRATION || 
+                          vch.Remarks || vch.remarks || vch.REMARKS || 
+                          vch.Description || vch.description || vch.Notes || vch.notes || 
+                          item.Narration || item.narration || null;
 
         const reviewReasons: string[] = [];
         if (!parsedDate) reviewReasons.push('Missing or unparseable voucher date');
@@ -1002,27 +1245,28 @@ export class OfflineDataImportEngine {
     if (Array.isArray(parsed)) {
       // Analyze array elements
       const first = parsed[0] || {};
-      const isVoucherCandidate = first.voucherNumber !== undefined || first.VOUCHERNUMBER !== undefined || first.VchNo !== undefined ||
-                                 first.voucherType !== undefined || first.VOUCHERTYPENAME !== undefined || first.VchType !== undefined ||
+      const isVoucherCandidate = first.VoucherNumber !== undefined || first.voucherNumber !== undefined || first.VOUCHERNUMBER !== undefined || first.VchNo !== undefined ||
+                                 first.VoucherType !== undefined || first.voucherType !== undefined || first.VOUCHERTYPENAME !== undefined || first.VchType !== undefined ||
                                  first.date !== undefined || first.DATE !== undefined || first.Date !== undefined ||
-                                 first.amount !== undefined || first.AMOUNT !== undefined || first.Amount !== undefined || first.Particulars !== undefined;
+                                 first.amount !== undefined || first.AMOUNT !== undefined || first.Amount !== undefined || first.Particulars !== undefined ||
+                                 first.ALLLEDGERENTRIES !== undefined || first.allLedgerEntries !== undefined || first.entries !== undefined || first.lines !== undefined;
 
       if (isVoucherCandidate) {
         vouchers = extractVouchersFromArray(parsed, '$');
       } else {
         // Array of Ledgers
         ledgers = parsed.map((item, idx) => {
-          const name = item.name || item.ledgerName || item.LEDGERNAME || item.LedgerName || null;
-          const parent = item.parent || item.PARENT || item.group || item.Parent || item.Group || null;
-          const opRaw = item.openingBalance !== undefined ? parseFloat(item.openingBalance) : null;
-          const clRaw = item.closingBalance !== undefined ? parseFloat(item.closingBalance) : null;
+          const name = item.Name || item.name || item.NAME || item.LedgerName || item.ledgerName || item.LEDGERNAME || item.Account || item.account || null;
+          const parent = item.Parent || item.parent || item.PARENT || item.Group || item.group || item.GROUP || item.Under || item.under || null;
+          const opRaw = item.openingBalance !== undefined ? parseFloat(item.openingBalance) : (item.OpeningBalance !== undefined ? parseFloat(item.OpeningBalance) : null);
+          const clRaw = item.closingBalance !== undefined ? parseFloat(item.closingBalance) : (item.ClosingBalance !== undefined ? parseFloat(item.ClosingBalance) : null);
 
           return {
             name,
             parent,
             openingBalance: isNaN(opRaw as number) ? null : opRaw,
             closingBalance: isNaN(clRaw as number) ? null : clRaw,
-            gstin: item.gstin || item.GSTIN || null,
+            gstin: item.gstin || item.GSTIN || item.gstNo || null,
             state: item.state || item.STATE || null,
             reviewRequired: !name || !parent,
             traceability: {
@@ -1035,76 +1279,22 @@ export class OfflineDataImportEngine {
         });
       }
     } else if (typeof parsed === 'object' && parsed !== null) {
-      if (parsed.company || parsed.companyName || parsed.COMPANYNAME || parsed.CompanyName) {
-        detectedCompany = String(parsed.company || parsed.companyName || parsed.COMPANYNAME || parsed.CompanyName).trim();
+      if (parsed.company || parsed.companyName || parsed.COMPANYNAME || parsed.CompanyName || parsed.Company || parsed.COMPANY) {
+        const compVal = parsed.company || parsed.companyName || parsed.COMPANYNAME || parsed.CompanyName || parsed.Company || parsed.COMPANY;
+        if (typeof compVal === 'string') {
+          detectedCompany = compVal.trim();
+        } else if (typeof compVal === 'object' && compVal !== null) {
+          detectedCompany = String(compVal.name || compVal.Name || compVal.companyName || compVal.CompanyName || compVal.COMPANY || '').trim() || null;
+        }
       }
 
-      if (parsed.financialYear && typeof parsed.financialYear === 'object') {
-        const from = this.parseTallyDate(parsed.financialYear.from || parsed.financialYear.startDate || parsed.financialYear.From || parsed.financialYear.startingFrom);
-        const to = this.parseTallyDate(parsed.financialYear.to || parsed.financialYear.endDate || parsed.financialYear.To || parsed.financialYear.endingAt);
-        if (from && to) {
-          detectedFyFrom = from;
-          detectedFyTo = to;
-          isFyDetected = true;
-          fyDetectionSource = 'JSON Schema Object ($.financialYear)';
-          fySourceEvidence = {
-            sourceType: 'JSON',
-            sourcePath: '$.financialYear',
-            sourceField: 'financialYear.from / to',
-            sourceValue: `${parsed.financialYear.from || parsed.financialYear.startDate || parsed.financialYear.From || parsed.financialYear.startingFrom} - ${parsed.financialYear.to || parsed.financialYear.endDate || parsed.financialYear.To || parsed.financialYear.endingAt}`
-          };
-        }
-      } else if (typeof parsed.financialYear === 'string') {
-        const parts = parsed.financialYear.split(/[-–to]/i).map((s: string) => s.trim());
-        if (parts.length === 2) {
-          let y1 = parseInt(parts[0]);
-          let y2 = parseInt(parts[1]);
-          if (!isNaN(y1) && !isNaN(y2)) {
-            if (y1 < 100) y1 += 2000;
-            if (y2 < 100) y2 += 2000;
-            detectedFyFrom = `${y1}-04-01`;
-            detectedFyTo = `${y2 === y1 + 1 || y2 === y1 ? y1 + 1 : y2}-03-31`;
-            isFyDetected = true;
-            fyDetectionSource = 'JSON Schema String ($.financialYear)';
-            fySourceEvidence = {
-              sourceType: 'JSON',
-              sourcePath: '$.financialYear',
-              sourceField: 'financialYear',
-              sourceValue: parsed.financialYear
-            };
-          } else {
-            const p1 = this.parseTallyDate(parts[0]);
-            const p2 = this.parseTallyDate(parts[1]);
-            if (p1 && p2) {
-              detectedFyFrom = p1;
-              detectedFyTo = p2;
-              isFyDetected = true;
-              fyDetectionSource = 'JSON Schema String ($.financialYear date range)';
-              fySourceEvidence = {
-                sourceType: 'JSON',
-                sourcePath: '$.financialYear',
-                sourceField: 'financialYear',
-                sourceValue: parsed.financialYear
-              };
-            }
-          }
-        }
-      } else if (parsed.financialYearFrom && parsed.financialYearTo) {
-        const from = this.parseTallyDate(parsed.financialYearFrom);
-        const to = this.parseTallyDate(parsed.financialYearTo);
-        if (from && to) {
-          detectedFyFrom = from;
-          detectedFyTo = to;
-          isFyDetected = true;
-          fyDetectionSource = 'JSON Schema Fields (financialYearFrom / financialYearTo)';
-          fySourceEvidence = {
-            sourceType: 'JSON',
-            sourcePath: '$.financialYearFrom',
-            sourceField: 'financialYearFrom / financialYearTo',
-            sourceValue: `${parsed.financialYearFrom} - ${parsed.financialYearTo}`
-          };
-        }
-      }
+      // Comprehensive Financial Year detection
+      const fyRes = this.detectFinancialYearFromJson(parsed);
+      detectedFyFrom = fyRes.from;
+      detectedFyTo = fyRes.to;
+      isFyDetected = fyRes.isDetected;
+      fyDetectionSource = fyRes.source;
+      fySourceEvidence = fyRes.evidence;
 
       // Check for DayBook / daybook array or nested object structure
       const rawDaybook = parsed.DayBook || parsed.daybook || parsed.DAYBOOK || parsed.Daybook;

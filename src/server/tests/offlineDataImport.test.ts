@@ -130,6 +130,78 @@ export async function runOfflineDataImportTests(): Promise<{
     );
 
     // =========================================================================
+    // Test 2B: JSON Canonical Voucher Mapping (PascalCase & ALLLEDGERENTRIES with IsDebit)
+    // =========================================================================
+    const pascalCaseJson = JSON.stringify({
+      Company: 'Alpha Trading Co',
+      FinancialYear: '2024-2025',
+      DayBook: [
+        {
+          Date: '2024-05-15',
+          VoucherNumber: 'INV-2024-001',
+          VoucherType: 'Sales',
+          Narration: 'Sale of electrical goods',
+          ALLLEDGERENTRIES: [
+            {
+              LedgerName: 'Customer Alpha',
+              Amount: 75000,
+              IsDebit: true
+            },
+            {
+              LedgerName: 'Sales Account',
+              Amount: 75000,
+              IsDebit: false
+            }
+          ]
+        },
+        {
+          Date: '2024-05-16',
+          VoucherNumber: 'RCPT-101',
+          VoucherType: 'Receipt',
+          Narration: 'Payment received via NEFT',
+          ALLLEDGERENTRIES: [
+            {
+              LedgerName: 'HDFC Bank',
+              Amount: 75000,
+              isDebit: true
+            },
+            {
+              LedgerName: 'Customer Alpha',
+              Amount: 75000,
+              isDebit: false
+            }
+          ]
+        }
+      ]
+    });
+
+    const parsedPascalJson = engine.parseJsonData(pascalCaseJson, 'daybook_sample.json');
+    assert(
+      'JSON Canonical Mapping - PascalCase VoucherNumber, VoucherType, Date, Narration',
+      parsedPascalJson.rawRecords.vouchers.length === 2 &&
+      parsedPascalJson.rawRecords.vouchers[0].voucherNumber === 'INV-2024-001' &&
+      parsedPascalJson.rawRecords.vouchers[0].voucherType === 'Sales' &&
+      parsedPascalJson.rawRecords.vouchers[0].date === '2024-05-15' &&
+      parsedPascalJson.rawRecords.vouchers[0].narration === 'Sale of electrical goods',
+      `Voucher: ${parsedPascalJson.rawRecords.vouchers[0]?.voucherNumber}, Type: ${parsedPascalJson.rawRecords.vouchers[0]?.voucherType}`
+    );
+
+    assert(
+      'JSON Canonical Mapping - ALLLEDGERENTRIES IsDebit boolean conversion without fabrication',
+      parsedPascalJson.rawRecords.vouchers[0].entries.length === 2 &&
+      parsedPascalJson.rawRecords.vouchers[0].entries[0].ledgerName === 'Customer Alpha' &&
+      parsedPascalJson.rawRecords.vouchers[0].entries[0].amount === 75000 &&
+      parsedPascalJson.rawRecords.vouchers[0].entries[0].isDebit === true &&
+      parsedPascalJson.rawRecords.vouchers[0].entries[0].direction === 'DEBIT' &&
+      parsedPascalJson.rawRecords.vouchers[0].entries[1].ledgerName === 'Sales Account' &&
+      parsedPascalJson.rawRecords.vouchers[0].entries[1].amount === 75000 &&
+      parsedPascalJson.rawRecords.vouchers[0].entries[1].isDebit === false &&
+      parsedPascalJson.rawRecords.vouchers[0].entries[1].direction === 'CREDIT' &&
+      parsedPascalJson.rawRecords.vouchers[0].isBalanced === true,
+      `Voucher 1 entries verified: balanced=${parsedPascalJson.rawRecords.vouchers[0]?.isBalanced}`
+    );
+
+    // =========================================================================
     // Test 3: Excel (XLSX) Column Semantic Detection
     // =========================================================================
     const wb = XLSX.utils.book_new();
