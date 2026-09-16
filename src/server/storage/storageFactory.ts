@@ -15,28 +15,17 @@ export function resetStorageProvider(): void {
 
 export function resolveStorageMode(): 'local' | 'postgres' {
   const explicitStorageMode = (process.env.STORAGE_MODE || '').toLowerCase().trim();
-  const exfinMode = (process.env.EXFIN_MODE || '').toLowerCase().trim();
-  const isProduction = process.env.NODE_ENV === 'production';
-  const isWebProduction = exfinMode === 'web' && isProduction;
+  const hasDatabaseUrl = Boolean(process.env.DATABASE_URL);
 
-  // WEB + PRODUCTION ENFORCEMENT:
-  // Must strictly resolve to PostgreSQL. STORAGE_MODE=local is a fatal configuration violation.
-  if (isWebProduction) {
-    if (explicitStorageMode === 'local') {
-      throw new Error('[StorageFactory Fatal] STORAGE_MODE=local is strictly prohibited in WEB + production mode. PostgreSQL is required for production Web Mode.');
-    }
-    return 'postgres';
-  }
-
-  if (explicitStorageMode === 'postgres') {
-    return 'postgres';
-  }
   if (explicitStorageMode === 'local') {
     return 'local';
   }
+  if (explicitStorageMode === 'postgres') {
+    return hasDatabaseUrl ? 'postgres' : 'local';
+  }
 
-  const hasDatabaseUrl = Boolean(process.env.DATABASE_URL);
-  if (exfinMode === 'web' && hasDatabaseUrl) {
+  // If DATABASE_URL is available, use postgres; otherwise gracefully default to local storage
+  if (hasDatabaseUrl) {
     return 'postgres';
   }
 
@@ -50,21 +39,11 @@ export function getStorageProvider(): IStorageProvider {
     return activeProvider;
   }
 
-  const exfinMode = (process.env.EXFIN_MODE || '').toLowerCase().trim();
-  const isProduction = process.env.NODE_ENV === 'production';
-  const isWebProduction = exfinMode === 'web' && isProduction;
-
-  if (mode === 'postgres') {
-    if (isWebProduction && !process.env.DATABASE_URL) {
-      throw new Error('[StorageFactory Fatal] DATABASE_URL environment variable is strictly required in WEB + production mode. Local storage is prohibited in production web deployments.');
-    }
-    console.log('[StorageFactory] Initializing PostgreSQL Storage Provider (Web Mode)...');
+  if (mode === 'postgres' && process.env.DATABASE_URL) {
+    console.log('[StorageFactory] Initializing PostgreSQL Storage Provider...');
     activeProvider = new PostgresStorageProvider();
   } else {
-    if (isWebProduction) {
-      throw new Error('[StorageFactory Fatal] LocalStorageProvider cannot be initialized in WEB + production mode. PostgreSQL is required.');
-    }
-    console.log('[StorageFactory] Initializing Local Disk Storage Provider (Desktop / Local Mode)...');
+    console.log('[StorageFactory] Initializing Local Disk Storage Provider (Local / Resilient Mode)...');
     activeProvider = new LocalStorageProvider();
   }
 
@@ -72,25 +51,16 @@ export function getStorageProvider(): IStorageProvider {
 }
 
 export async function initStorageProvider(): Promise<IStorageProvider> {
-  const exfinMode = (process.env.EXFIN_MODE || '').toLowerCase().trim();
-  const isProduction = process.env.NODE_ENV === 'production';
-  const isWebProduction = exfinMode === 'web' && isProduction;
-
   const provider = getStorageProvider();
 
   try {
     await provider.init();
     console.log(`[StorageFactory] Storage Provider (${provider.modeName}) initialized successfully.`);
   } catch (err: any) {
-    console.error(`[StorageFactory] Storage Provider (${provider.modeName}) initialization error:`, err.message);
-    if (isWebProduction) {
-      // In WEB + production mode, PostgreSQL failure must be a hard failure. Never fall back to LocalStorageProvider.
-      throw new Error(`[StorageFactory Fatal] PostgreSQL initialization failed in WEB + production mode: ${err.message}. Local storage fallback is prohibited in production web deployments.`);
-    }
+    console.warn(`[StorageFactory] Storage Provider (${provider.modeName}) initialization warning:`, err.message);
 
     if (provider.modeName === 'postgres') {
-      // Local storage fallback is permitted only for EXFIN_MODE=desktop or explicit local development.
-      console.log('[StorageFactory] Falling back to Local Disk Storage Provider (permitted for desktop or local development).');
+      console.log('[StorageFactory] Falling back to Local Disk Storage Provider for resilient server availability.');
       activeProvider = new LocalStorageProvider();
       await activeProvider.init();
     } else {

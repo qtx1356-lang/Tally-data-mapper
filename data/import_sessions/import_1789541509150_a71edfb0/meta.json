@@ -1,0 +1,36 @@
+{
+  "sessionId": "import_1789541509150_a71edfb0",
+  "createdAt": "2026-09-16T06:51:49.151Z",
+  "updatedAt": "2026-09-16T06:51:49.152Z",
+  "status": "PARSED",
+  "fileName": "test_auto.json",
+  "fileType": "JSON",
+  "fileSize": 118,
+  "progress": {
+    "phase": "Completed",
+    "recordsProcessed": 0,
+    "percent": 100,
+    "message": "Parsing and validation complete"
+  },
+  "detectedCompany": "Automated Chunk Test",
+  "detectedFinancialYear": {
+    "from": "2024-04-01",
+    "to": "2025-03-31",
+    "isDetected": true,
+    "status": "DETECTED",
+    "detectionSource": "Detected in Source Data",
+    "sourceType": "JSON",
+    "sourcePath": "$.FinancialYear",
+    "sourceField": "FinancialYear",
+    "sourceValue": "2024-2025"
+  },
+  "counts": {
+    "vouchers": 0,
+    "ledgers": 0,
+    "stockItems": 0,
+    "totalDebit": 0,
+    "totalCredit": 0
+  },
+  "isBalanced": true,
+  "balanceDifference": 0
+}

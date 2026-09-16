@@ -713,7 +713,7 @@ export class OfflineDataImportEngine {
     }
 
     const parseFyString = (str: string, fieldPath: string, fieldName: string) => {
-      const clean = str.trim().replace(/^FY\s*[:=]?\s*/i, '').replace(/^F\.Y\.\s*[:=]?\s*/i, '').replace(/^Financial\s*Year\s*[:=]?\s*/i, '').trim();
+      const clean = str.trim().replace(/^FY\s*[:=]?\s*/i, '').replace(/^F\.Y\.\s*[:=]?\s*/i, '').replace(/^Financial\s*Year\s*[:=]?\s*/i, '').replace(/^Fiscal\s*Year\s*[:=]?\s*/i, '').trim();
       
       // Check year range format e.g. "2024-2025", "2024-25", "24-25", "2024 to 2025", "2024 - 2025", "2024/2025", "2024/25"
       const yrMatch = clean.match(/^(\d{2,4})\s*(?:[-–/]|to)\s*(\d{2,4})$/i);
@@ -729,7 +729,7 @@ export class OfflineDataImportEngine {
           from,
           to,
           isDetected: true,
-          source: `JSON Schema String (${fieldPath})`,
+          source: 'Detected in Source Data',
           evidence: {
             sourceType: 'JSON' as ImportFileFormat,
             sourcePath: fieldPath,
@@ -739,17 +739,17 @@ export class OfflineDataImportEngine {
         };
       }
 
-      // Check full date range e.g. "20240401 to 20250331", "2024-04-01 - 2025-03-31", "01-04-2024 to 31-03-2025"
-      const dateParts = clean.split(/\s*(?:[-–]|to)\s*/i);
-      if (dateParts.length === 2) {
-        const p1 = this.parseTallyDate(dateParts[0]);
-        const p2 = this.parseTallyDate(dateParts[1]);
+      // Check full date range e.g. "20240401 to 20250331", "2024-04-01 - 2025-03-31", "01-04-2024 to 31-03-2025", "2024/04/01 - 2025/03/31"
+      const dateMatch = clean.match(/^([\d]{2,4}[-/.\\]?[\d]{2}[-/.\\]?[\d]{2,4})\s*(?:to|[-–])\s*([\d]{2,4}[-/.\\]?[\d]{2}[-/.\\]?[\d]{2,4})$/i);
+      if (dateMatch) {
+        const p1 = this.parseTallyDate(dateMatch[1]);
+        const p2 = this.parseTallyDate(dateMatch[2]);
         if (p1 && p2) {
           return {
             from: p1,
             to: p2,
             isDetected: true,
-            source: `JSON Schema Date Range (${fieldPath})`,
+            source: 'Detected in Source Data',
             evidence: {
               sourceType: 'JSON' as ImportFileFormat,
               sourcePath: fieldPath,
@@ -765,7 +765,7 @@ export class OfflineDataImportEngine {
 
     for (const { obj, path } of candidateObjects) {
       // 1. Direct FY object / string fields
-      const fyKeys = ['financialYear', 'FinancialYear', 'FINANCIALYEAR', 'Financial Year', 'financial year', 'Financial_Year', 'financial_year', 'FY', 'fy', 'FYear', 'fYear', 'fyear', 'F_YEAR', 'f_year'];
+      const fyKeys = ['financialYear', 'FinancialYear', 'FINANCIALYEAR', 'Financial Year', 'financial year', 'Financial_Year', 'financial_year', 'FY', 'fy', 'FYear', 'fYear', 'fyear', 'F_YEAR', 'f_year', 'FiscalYear', 'fiscalYear', 'FISCALYEAR', 'Fiscal Year', 'fiscal year', 'Fiscal_Year', 'fiscal_year'];
       for (const k of fyKeys) {
         if (obj[k] !== undefined && obj[k] !== null) {
           const val = obj[k];
@@ -780,7 +780,7 @@ export class OfflineDataImportEngine {
                 from,
                 to,
                 isDetected: true,
-                source: `JSON Schema Object (${curPath})`,
+                source: 'Detected in Source Data',
                 evidence: {
                   sourceType: 'JSON' as ImportFileFormat,
                   sourcePath: curPath,
@@ -824,7 +824,7 @@ export class OfflineDataImportEngine {
             from,
             to,
             isDetected: true,
-            source: `JSON Schema Period Fields (${curPath}, ${foundToKey})`,
+            source: 'Detected in Source Data',
             evidence: {
               sourceType: 'JSON' as ImportFileFormat,
               sourcePath: curPath,

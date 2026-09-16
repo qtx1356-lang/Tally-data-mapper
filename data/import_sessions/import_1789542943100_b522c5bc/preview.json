@@ -1,0 +1,21 @@
+{
+  "fileType": "JSON",
+  "fileName": "test.json",
+  "fileSize": 2,
+  "detectedCompany": null,
+  "detectedFinancialYear": {
+    "from": null,
+    "to": null,
+    "isDetected": false,
+    "status": "REVIEW_REQUIRED",
+    "explanation": "Financial year was not detected in the source data.",
+    "detectionSource": "Not Detected in Source Data"
+  },
+  "rawSampleData": {
+    "vouchers": [],
+    "ledgers": [],
+    "groups": [],
+    "stockItems": []
+  },
+  "detectedEntities": []
+}

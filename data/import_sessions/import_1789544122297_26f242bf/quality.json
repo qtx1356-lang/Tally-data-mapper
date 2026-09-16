@@ -1,0 +1,17 @@
+{
+  "score": 88,
+  "totalRecordsChecked": 50,
+  "passedRecords": 50,
+  "duplicateVouchers": 0,
+  "missingDates": 0,
+  "invalidAmounts": 0,
+  "unbalancedVouchers": 0,
+  "orphanLedgers": 0,
+  "unmappedFieldsCount": 0,
+  "reviewRequiredFieldsCount": 8,
+  "warnings": [
+    "8 fields require mapping confirmation or manual review."
+  ],
+  "errors": [],
+  "recommendations": []
+}

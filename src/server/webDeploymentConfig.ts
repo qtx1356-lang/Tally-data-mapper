@@ -48,7 +48,7 @@ export const webDeploymentConfig: WebDeploymentConfiguration = {
   server: {
     defaultPort: 3000,
     host: '0.0.0.0',
-    dynamicPortResolution: true,
+    dynamicPortResolution: false,
     nodeEnv: process.env.NODE_ENV || 'development'
   },
   security: {

@@ -1,3 +1,7 @@
+import express from 'express';
+import fetch from 'node-fetch';
+import FormData from 'form-data';
+import { offlineDataImportRouter } from '../offlineDataImportRouter';
 /**
  * EXFIN Tally Audit Platform - Production Hardening Test Suite
  * 
@@ -134,10 +138,10 @@ export async function runOfflineDataImportTests(): Promise<{
     // =========================================================================
     const pascalCaseJson = JSON.stringify({
       Company: 'Alpha Trading Co',
-      FinancialYear: '2024-2025',
+      FinancialYear: '2025-04-01 to 2026-03-31',
       DayBook: [
         {
-          Date: '2024-05-15',
+          Date: '2025-05-15',
           VoucherNumber: 'INV-2024-001',
           VoucherType: 'Sales',
           Narration: 'Sale of electrical goods',
@@ -155,7 +159,7 @@ export async function runOfflineDataImportTests(): Promise<{
           ]
         },
         {
-          Date: '2024-05-16',
+          Date: '2025-05-16',
           VoucherNumber: 'RCPT-101',
           VoucherType: 'Receipt',
           Narration: 'Payment received via NEFT',
@@ -176,12 +180,22 @@ export async function runOfflineDataImportTests(): Promise<{
     });
 
     const parsedPascalJson = engine.parseJsonData(pascalCaseJson, 'daybook_sample.json');
+    
+    assert(
+      'JSON FY Explicit Date Range String Parsing',
+      parsedPascalJson.preview.detectedFinancialYear.from === '2025-04-01' &&
+      parsedPascalJson.preview.detectedFinancialYear.to === '2026-03-31' &&
+      parsedPascalJson.preview.detectedFinancialYear.isDetected === true &&
+      parsedPascalJson.preview.detectedFinancialYear.detectionSource === 'Detected in Source Data',
+      `FY Source: ${parsedPascalJson.preview.detectedFinancialYear.detectionSource}`
+    );
+
     assert(
       'JSON Canonical Mapping - PascalCase VoucherNumber, VoucherType, Date, Narration',
       parsedPascalJson.rawRecords.vouchers.length === 2 &&
       parsedPascalJson.rawRecords.vouchers[0].voucherNumber === 'INV-2024-001' &&
       parsedPascalJson.rawRecords.vouchers[0].voucherType === 'Sales' &&
-      parsedPascalJson.rawRecords.vouchers[0].date === '2024-05-15' &&
+      parsedPascalJson.rawRecords.vouchers[0].date === '2025-05-15' &&
       parsedPascalJson.rawRecords.vouchers[0].narration === 'Sale of electrical goods',
       `Voucher: ${parsedPascalJson.rawRecords.vouchers[0]?.voucherNumber}, Type: ${parsedPascalJson.rawRecords.vouchers[0]?.voucherType}`
     );
@@ -192,11 +206,11 @@ export async function runOfflineDataImportTests(): Promise<{
       parsedPascalJson.rawRecords.vouchers[0].entries[0].ledgerName === 'Customer Alpha' &&
       parsedPascalJson.rawRecords.vouchers[0].entries[0].amount === 75000 &&
       parsedPascalJson.rawRecords.vouchers[0].entries[0].isDebit === true &&
-      parsedPascalJson.rawRecords.vouchers[0].entries[0].direction === 'DEBIT' &&
+      parsedPascalJson.rawRecords.vouchers[0].entries[0].direction === 'Debit' &&
       parsedPascalJson.rawRecords.vouchers[0].entries[1].ledgerName === 'Sales Account' &&
       parsedPascalJson.rawRecords.vouchers[0].entries[1].amount === 75000 &&
       parsedPascalJson.rawRecords.vouchers[0].entries[1].isDebit === false &&
-      parsedPascalJson.rawRecords.vouchers[0].entries[1].direction === 'CREDIT' &&
+      parsedPascalJson.rawRecords.vouchers[0].entries[1].direction === 'Credit' &&
       parsedPascalJson.rawRecords.vouchers[0].isBalanced === true,
       `Voucher 1 entries verified: balanced=${parsedPascalJson.rawRecords.vouchers[0]?.isBalanced}`
     );
@@ -1509,7 +1523,160 @@ export async function runOfflineDataImportTests(): Promise<{
     }
   }
 
-  const passed = results.filter(r => r.passed).length;
+  
+    // =========================================================================
+    // Test Chunked Upload Lifecycle (With internal Express Server)
+    // =========================================================================
+    try {
+      const engine = new OfflineDataImportEngine(testStorageDir);
+      const app = express();
+      app.use(express.json());
+      app.use('/api/import', offlineDataImportRouter);
+
+      const server = await new Promise<any>((resolve) => {
+        const srv = app.listen(0, () => resolve(srv));
+      });
+      const port = server.address().port;
+      const baseUrl = `http://localhost:${port}`;
+
+      // 1. Small JSON Upload (Standard non-chunked path test)
+      const smallJsonStr = JSON.stringify({
+        Company: "Small Standard Corp",
+        FinancialYear: "2025-04-01 to 2026-03-31",
+        DayBook: [{ Date: "2025-05-10", VoucherType: "Payment", VoucherNumber: "PAY-01" }]
+      });
+      const parsedSmall = engine.parseJsonData(smallJsonStr, 'small_test.json');
+      assert('Small JSON Upload Standard Path', parsedSmall.rawRecords.company === 'Small Standard Corp', 'Small JSON parsed via standard engine path');
+
+      // 2. Chunk Initialization
+      const dummyFileStr = JSON.stringify({
+        Company: "Automated Chunk Test",
+        FinancialYear: "2025-04-01 to 2026-03-31",
+        DayBook: [
+          { Date: "2025-05-15", VoucherType: "Sales", VoucherNumber: "CHK-001", Amount: 15000 },
+          { Date: "2025-05-16", VoucherType: "Receipt", VoucherNumber: "CHK-002", Amount: 15000 }
+        ]
+      });
+      const dummyBuffer = Buffer.from(dummyFileStr);
+      const dummySize = dummyBuffer.length;
+
+      const initRes = await fetch(`${baseUrl}/api/import/chunk/init`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          originalFilename: 'test_auto.json',
+          totalFileSize: dummySize,
+          totalChunks: 3
+        })
+      });
+      const initData = await initRes.json() as any;
+      const uploadId = initData.uploadId;
+      
+      assert('Chunk Initialization', initData.success && !!uploadId, 'Chunk session initialized correctly with upload ID');
+
+      // Calculate slice offsets for 3 chunks
+      const slice1 = dummyBuffer.subarray(0, Math.floor(dummySize / 3));
+      const slice2 = dummyBuffer.subarray(Math.floor(dummySize / 3), Math.floor((dummySize * 2) / 3));
+      const slice3 = dummyBuffer.subarray(Math.floor((dummySize * 2) / 3));
+
+      // 3. Out-of-order Chunk Upload (Upload Chunk 2 before Chunk 1)
+      const formDataChunk2 = new FormData();
+      formDataChunk2.append('uploadId', uploadId);
+      formDataChunk2.append('chunkIndex', '2');
+      formDataChunk2.append('totalChunks', '3');
+      formDataChunk2.append('file', slice3, { filename: 'blob' });
+      const chunk2Res = await fetch(`${baseUrl}/api/import/chunk`, { method: 'POST', body: formDataChunk2 as any });
+      const chunk2Data = await chunk2Res.json() as any;
+
+      assert('Out-of-Order Chunk Upload (Chunk Index 2)', chunk2Data.success, 'Out-of-order chunk stored successfully without index dependency');
+
+      // 4. Missing Chunk Detection (Try completing before chunk 0 and 1 are uploaded)
+      const prematureCompleteRes = await fetch(`${baseUrl}/api/import/chunk/complete`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          uploadId,
+          originalFilename: 'test_auto.json',
+          totalFileSize: dummySize,
+          totalChunks: 3,
+          fileType: 'JSON'
+        })
+      });
+      const prematureData = await prematureCompleteRes.json() as any;
+      assert('Missing Chunk Detection', prematureData.success === false && prematureData.error.includes('Missing chunk'), 'Assembly rejected when chunks are missing');
+
+      // 5. Upload Chunk 0 (Single chunk upload test)
+      const formDataChunk0 = new FormData();
+      formDataChunk0.append('uploadId', uploadId);
+      formDataChunk0.append('chunkIndex', '0');
+      formDataChunk0.append('totalChunks', '3');
+      formDataChunk0.append('file', slice1, { filename: 'blob' });
+      const chunk0Res = await fetch(`${baseUrl}/api/import/chunk`, { method: 'POST', body: formDataChunk0 as any });
+      const chunk0Data = await chunk0Res.json() as any;
+
+      assert('Single/Multiple Chunk Upload (Chunk Index 0)', chunk0Data.success, 'Chunk index 0 uploaded successfully');
+
+      // 6. Chunk Retry Simulation (Re-upload Chunk 0 to verify idempotent overwrite)
+      const retryChunk0Res = await fetch(`${baseUrl}/api/import/chunk`, { method: 'POST', body: formDataChunk0 as any });
+      const retryChunk0Data = await retryChunk0Res.json() as any;
+      assert('Chunk Retry Handling', retryChunk0Data.success, 'Chunk re-upload/retry succeeded without corruption');
+
+      // 7. Upload Chunk 1
+      const formDataChunk1 = new FormData();
+      formDataChunk1.append('uploadId', uploadId);
+      formDataChunk1.append('chunkIndex', '1');
+      formDataChunk1.append('totalChunks', '3');
+      formDataChunk1.append('file', slice2, { filename: 'blob' });
+      const chunk1Res = await fetch(`${baseUrl}/api/import/chunk`, { method: 'POST', body: formDataChunk1 as any });
+      const chunk1Data = await chunk1Res.json() as any;
+
+      assert('Multiple Chunk Upload (Chunk Index 1)', chunk1Data.success, 'Chunk index 1 uploaded successfully');
+
+      // 8. File-Size Mismatch Verification (Complete with wrong totalFileSize)
+      const wrongSizeRes = await fetch(`${baseUrl}/api/import/chunk/complete`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          uploadId,
+          originalFilename: 'test_auto.json',
+          totalFileSize: dummySize + 9999,
+          totalChunks: 3,
+          fileType: 'JSON'
+        })
+      });
+      const wrongSizeData = await wrongSizeRes.json() as any;
+      assert('File-Size Verification', wrongSizeData.success === false && wrongSizeData.error.includes('File size mismatch'), 'Rejected assembled file when size mismatched expectation');
+
+      // 9. Complete Assembly & Parse (Byte-for-Byte Verification + Clean Temporary Chunks)
+      const completeRes = await fetch(`${baseUrl}/api/import/chunk/complete`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          uploadId,
+          originalFilename: 'test_auto.json',
+          totalFileSize: dummySize,
+          totalChunks: 3,
+          fileType: 'JSON'
+        })
+      });
+      const completeData = await completeRes.json() as any;
+
+      assert(
+        'Final Assembled File Byte-for-Byte Equivalence & Parse',
+        completeData.success && completeData.preview.detectedCompany === 'Automated Chunk Test',
+        'Assembled file parsed perfectly with exact content match'
+      );
+
+      // 10. Verify Chunk Directory Cleaned Up
+      const sessionDir = path.join(process.cwd(), 'data', 'temp_chunks', uploadId);
+      assert('Temporary Chunk Files Cleaned Up', !fs.existsSync(sessionDir), 'Chunk folder deleted after assembly complete');
+
+      server.close();
+    } catch (e: any) {
+      assert('Chunked Upload Lifecycle', false, `Failed with error: ${e.message}`);
+    }
+
+    const passed = results.filter(r => r.passed).length;
   const failed = results.filter(r => !r.passed).length;
 
   return {

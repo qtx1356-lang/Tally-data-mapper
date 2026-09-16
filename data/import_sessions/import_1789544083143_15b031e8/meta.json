@@ -1,0 +1,36 @@
+{
+  "sessionId": "import_1789544083143_15b031e8",
+  "createdAt": "2026-09-16T07:34:43.143Z",
+  "updatedAt": "2026-09-16T07:34:43.575Z",
+  "status": "PARSED",
+  "fileName": "Test_3MB_DayBook.json",
+  "fileType": "JSON",
+  "fileSize": 2997152,
+  "progress": {
+    "phase": "Completed",
+    "recordsProcessed": 0,
+    "percent": 100,
+    "message": "Parsing and validation complete"
+  },
+  "detectedCompany": null,
+  "detectedFinancialYear": {
+    "from": "2025-04-01",
+    "to": "2026-03-31",
+    "isDetected": true,
+    "status": "DETECTED",
+    "detectionSource": "Detected in Source Data",
+    "sourceType": "JSON",
+    "sourcePath": "$.Header.FinancialYear",
+    "sourceField": "FinancialYear",
+    "sourceValue": "2025-04-01 to 2026-03-31"
+  },
+  "counts": {
+    "vouchers": 0,
+    "ledgers": 0,
+    "stockItems": 0,
+    "totalDebit": 0,
+    "totalCredit": 0
+  },
+  "isBalanced": true,
+  "balanceDifference": 0
+}

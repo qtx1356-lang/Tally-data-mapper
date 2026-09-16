@@ -1,0 +1,33 @@
+{
+  "sessionId": "import_1789542943100_b522c5bc",
+  "createdAt": "2026-09-16T07:15:43.100Z",
+  "updatedAt": "2026-09-16T07:15:43.101Z",
+  "status": "PARSED",
+  "fileName": "test.json",
+  "fileType": "JSON",
+  "fileSize": 2,
+  "progress": {
+    "phase": "Completed",
+    "recordsProcessed": 0,
+    "percent": 100,
+    "message": "Parsing and validation complete"
+  },
+  "detectedCompany": null,
+  "detectedFinancialYear": {
+    "from": null,
+    "to": null,
+    "isDetected": false,
+    "status": "REVIEW_REQUIRED",
+    "explanation": "Financial year was not detected in the source data.",
+    "detectionSource": "Not Detected in Source Data"
+  },
+  "counts": {
+    "vouchers": 0,
+    "ledgers": 0,
+    "stockItems": 0,
+    "totalDebit": 0,
+    "totalCredit": 0
+  },
+  "isBalanced": true,
+  "balanceDifference": 0
+}

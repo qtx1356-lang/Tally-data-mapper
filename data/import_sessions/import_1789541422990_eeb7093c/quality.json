@@ -1,0 +1,15 @@
+{
+  "score": 100,
+  "totalRecordsChecked": 0,
+  "passedRecords": 0,
+  "duplicateVouchers": 0,
+  "missingDates": 0,
+  "invalidAmounts": 0,
+  "unbalancedVouchers": 0,
+  "orphanLedgers": 0,
+  "unmappedFieldsCount": 0,
+  "reviewRequiredFieldsCount": 0,
+  "warnings": [],
+  "errors": [],
+  "recommendations": []
+}

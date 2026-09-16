@@ -1,0 +1,442 @@
+{
+  "fileType": "JSON",
+  "fileName": "Test_DayBook.json",
+  "fileSize": 794165,
+  "detectedCompany": null,
+  "detectedFinancialYear": {
+    "from": "2025-04-01",
+    "to": "2026-03-31",
+    "isDetected": true,
+    "status": "DETECTED",
+    "detectionSource": "Detected in Source Data",
+    "sourceType": "JSON",
+    "sourcePath": "$.Header.FinancialYear",
+    "sourceField": "FinancialYear",
+    "sourceValue": "2025-04-01 to 2026-03-31"
+  },
+  "rawSampleData": {
+    "vouchers": [
+      {
+        "id": "JSON-V-1",
+        "voucherNumber": "VCH-1",
+        "voucherType": "Receipt",
+        "date": "2025-05-15",
+        "partyLedger": "Test Party 1",
+        "amount": 1001,
+        "totalDebit": 0,
+        "totalCredit": 0,
+        "difference": 0,
+        "isBalanced": false,
+        "narration": "Test narration for transaction 1",
+        "entries": [],
+        "reviewRequired": true,
+        "reviewReasons": [
+          "No source ledger entries detected (missing ALLLEDGERENTRIES / LEDGERENTRIES / entries structure)"
+        ],
+        "sourceFile": "Test_DayBook.json",
+        "datasetId": "",
+        "traceability": {
+          "sourceFileType": "JSON",
+          "sourceFile": "Test_DayBook.json",
+          "jsonPath": "$.DayBook[0]",
+          "sourceField": "VCH-1"
+        }
+      },
+      {
+        "id": "JSON-V-2",
+        "voucherNumber": "VCH-2",
+        "voucherType": "Sales",
+        "date": "2025-05-15",
+        "partyLedger": "Test Party 2",
+        "amount": 1002,
+        "totalDebit": 0,
+        "totalCredit": 0,
+        "difference": 0,
+        "isBalanced": false,
+        "narration": "Test narration for transaction 2",
+        "entries": [],
+        "reviewRequired": true,
+        "reviewReasons": [
+          "No source ledger entries detected (missing ALLLEDGERENTRIES / LEDGERENTRIES / entries structure)"
+        ],
+        "sourceFile": "Test_DayBook.json",
+        "datasetId": "",
+        "traceability": {
+          "sourceFileType": "JSON",
+          "sourceFile": "Test_DayBook.json",
+          "jsonPath": "$.DayBook[1]",
+          "sourceField": "VCH-2"
+        }
+      },
+      {
+        "id": "JSON-V-3",
+        "voucherNumber": "VCH-3",
+        "voucherType": "Receipt",
+        "date": "2025-05-15",
+        "partyLedger": "Test Party 3",
+        "amount": 1003,
+        "totalDebit": 0,
+        "totalCredit": 0,
+        "difference": 0,
+        "isBalanced": false,
+        "narration": "Test narration for transaction 3",
+        "entries": [],
+        "reviewRequired": true,
+        "reviewReasons": [
+          "No source ledger entries detected (missing ALLLEDGERENTRIES / LEDGERENTRIES / entries structure)"
+        ],
+        "sourceFile": "Test_DayBook.json",
+        "datasetId": "",
+        "traceability": {
+          "sourceFileType": "JSON",
+          "sourceFile": "Test_DayBook.json",
+          "jsonPath": "$.DayBook[2]",
+          "sourceField": "VCH-3"
+        }
+      },
+      {
+        "id": "JSON-V-4",
+        "voucherNumber": "VCH-4",
+        "voucherType": "Sales",
+        "date": "2025-05-15",
+        "partyLedger": "Test Party 4",
+        "amount": 1004,
+        "totalDebit": 0,
+        "totalCredit": 0,
+        "difference": 0,
+        "isBalanced": false,
+        "narration": "Test narration for transaction 4",
+        "entries": [],
+        "reviewRequired": true,
+        "reviewReasons": [
+          "No source ledger entries detected (missing ALLLEDGERENTRIES / LEDGERENTRIES / entries structure)"
+        ],
+        "sourceFile": "Test_DayBook.json",
+        "datasetId": "",
+        "traceability": {
+          "sourceFileType": "JSON",
+          "sourceFile": "Test_DayBook.json",
+          "jsonPath": "$.DayBook[3]",
+          "sourceField": "VCH-4"
+        }
+      },
+      {
+        "id": "JSON-V-5",
+        "voucherNumber": "VCH-5",
+        "voucherType": "Receipt",
+        "date": "2025-05-15",
+        "partyLedger": "Test Party 5",
+        "amount": 1005,
+        "totalDebit": 0,
+        "totalCredit": 0,
+        "difference": 0,
+        "isBalanced": false,
+        "narration": "Test narration for transaction 5",
+        "entries": [],
+        "reviewRequired": true,
+        "reviewReasons": [
+          "No source ledger entries detected (missing ALLLEDGERENTRIES / LEDGERENTRIES / entries structure)"
+        ],
+        "sourceFile": "Test_DayBook.json",
+        "datasetId": "",
+        "traceability": {
+          "sourceFileType": "JSON",
+          "sourceFile": "Test_DayBook.json",
+          "jsonPath": "$.DayBook[4]",
+          "sourceField": "VCH-5"
+        }
+      },
+      {
+        "id": "JSON-V-6",
+        "voucherNumber": "VCH-6",
+        "voucherType": "Sales",
+        "date": "2025-05-15",
+        "partyLedger": "Test Party 6",
+        "amount": 1006,
+        "totalDebit": 0,
+        "totalCredit": 0,
+        "difference": 0,
+        "isBalanced": false,
+        "narration": "Test narration for transaction 6",
+        "entries": [],
+        "reviewRequired": true,
+        "reviewReasons": [
+          "No source ledger entries detected (missing ALLLEDGERENTRIES / LEDGERENTRIES / entries structure)"
+        ],
+        "sourceFile": "Test_DayBook.json",
+        "datasetId": "",
+        "traceability": {
+          "sourceFileType": "JSON",
+          "sourceFile": "Test_DayBook.json",
+          "jsonPath": "$.DayBook[5]",
+          "sourceField": "VCH-6"
+        }
+      },
+      {
+        "id": "JSON-V-7",
+        "voucherNumber": "VCH-7",
+        "voucherType": "Receipt",
+        "date": "2025-05-15",
+        "partyLedger": "Test Party 7",
+        "amount": 1007,
+        "totalDebit": 0,
+        "totalCredit": 0,
+        "difference": 0,
+        "isBalanced": false,
+        "narration": "Test narration for transaction 7",
+        "entries": [],
+        "reviewRequired": true,
+        "reviewReasons": [
+          "No source ledger entries detected (missing ALLLEDGERENTRIES / LEDGERENTRIES / entries structure)"
+        ],
+        "sourceFile": "Test_DayBook.json",
+        "datasetId": "",
+        "traceability": {
+          "sourceFileType": "JSON",
+          "sourceFile": "Test_DayBook.json",
+          "jsonPath": "$.DayBook[6]",
+          "sourceField": "VCH-7"
+        }
+      },
+      {
+        "id": "JSON-V-8",
+        "voucherNumber": "VCH-8",
+        "voucherType": "Sales",
+        "date": "2025-05-15",
+        "partyLedger": "Test Party 8",
+        "amount": 1008,
+        "totalDebit": 0,
+        "totalCredit": 0,
+        "difference": 0,
+        "isBalanced": false,
+        "narration": "Test narration for transaction 8",
+        "entries": [],
+        "reviewRequired": true,
+        "reviewReasons": [
+          "No source ledger entries detected (missing ALLLEDGERENTRIES / LEDGERENTRIES / entries structure)"
+        ],
+        "sourceFile": "Test_DayBook.json",
+        "datasetId": "",
+        "traceability": {
+          "sourceFileType": "JSON",
+          "sourceFile": "Test_DayBook.json",
+          "jsonPath": "$.DayBook[7]",
+          "sourceField": "VCH-8"
+        }
+      },
+      {
+        "id": "JSON-V-9",
+        "voucherNumber": "VCH-9",
+        "voucherType": "Receipt",
+        "date": "2025-05-15",
+        "partyLedger": "Test Party 9",
+        "amount": 1009,
+        "totalDebit": 0,
+        "totalCredit": 0,
+        "difference": 0,
+        "isBalanced": false,
+        "narration": "Test narration for transaction 9",
+        "entries": [],
+        "reviewRequired": true,
+        "reviewReasons": [
+          "No source ledger entries detected (missing ALLLEDGERENTRIES / LEDGERENTRIES / entries structure)"
+        ],
+        "sourceFile": "Test_DayBook.json",
+        "datasetId": "",
+        "traceability": {
+          "sourceFileType": "JSON",
+          "sourceFile": "Test_DayBook.json",
+          "jsonPath": "$.DayBook[8]",
+          "sourceField": "VCH-9"
+        }
+      },
+      {
+        "id": "JSON-V-10",
+        "voucherNumber": "VCH-10",
+        "voucherType": "Sales",
+        "date": "2025-05-15",
+        "partyLedger": "Test Party 10",
+        "amount": 1010,
+        "totalDebit": 0,
+        "totalCredit": 0,
+        "difference": 0,
+        "isBalanced": false,
+        "narration": "Test narration for transaction 10",
+        "entries": [],
+        "reviewRequired": true,
+        "reviewReasons": [
+          "No source ledger entries detected (missing ALLLEDGERENTRIES / LEDGERENTRIES / entries structure)"
+        ],
+        "sourceFile": "Test_DayBook.json",
+        "datasetId": "",
+        "traceability": {
+          "sourceFileType": "JSON",
+          "sourceFile": "Test_DayBook.json",
+          "jsonPath": "$.DayBook[9]",
+          "sourceField": "VCH-10"
+        }
+      }
+    ],
+    "ledgers": [],
+    "groups": [],
+    "stockItems": []
+  },
+  "detectedEntities": [
+    {
+      "name": "Voucher Records",
+      "count": 3500,
+      "fields": [
+        "id",
+        "voucherNumber",
+        "voucherType",
+        "date",
+        "partyLedger",
+        "amount",
+        "totalDebit",
+        "totalCredit",
+        "difference",
+        "isBalanced",
+        "narration",
+        "entries",
+        "reviewRequired",
+        "reviewReasons",
+        "sourceFile",
+        "datasetId",
+        "traceability"
+      ],
+      "sample": [
+        {
+          "id": "JSON-V-1",
+          "voucherNumber": "VCH-1",
+          "voucherType": "Receipt",
+          "date": "2025-05-15",
+          "partyLedger": "Test Party 1",
+          "amount": 1001,
+          "totalDebit": 0,
+          "totalCredit": 0,
+          "difference": 0,
+          "isBalanced": false,
+          "narration": "Test narration for transaction 1",
+          "entries": [],
+          "reviewRequired": true,
+          "reviewReasons": [
+            "No source ledger entries detected (missing ALLLEDGERENTRIES / LEDGERENTRIES / entries structure)"
+          ],
+          "sourceFile": "Test_DayBook.json",
+          "datasetId": "",
+          "traceability": {
+            "sourceFileType": "JSON",
+            "sourceFile": "Test_DayBook.json",
+            "jsonPath": "$.DayBook[0]",
+            "sourceField": "VCH-1"
+          }
+        },
+        {
+          "id": "JSON-V-2",
+          "voucherNumber": "VCH-2",
+          "voucherType": "Sales",
+          "date": "2025-05-15",
+          "partyLedger": "Test Party 2",
+          "amount": 1002,
+          "totalDebit": 0,
+          "totalCredit": 0,
+          "difference": 0,
+          "isBalanced": false,
+          "narration": "Test narration for transaction 2",
+          "entries": [],
+          "reviewRequired": true,
+          "reviewReasons": [
+            "No source ledger entries detected (missing ALLLEDGERENTRIES / LEDGERENTRIES / entries structure)"
+          ],
+          "sourceFile": "Test_DayBook.json",
+          "datasetId": "",
+          "traceability": {
+            "sourceFileType": "JSON",
+            "sourceFile": "Test_DayBook.json",
+            "jsonPath": "$.DayBook[1]",
+            "sourceField": "VCH-2"
+          }
+        },
+        {
+          "id": "JSON-V-3",
+          "voucherNumber": "VCH-3",
+          "voucherType": "Receipt",
+          "date": "2025-05-15",
+          "partyLedger": "Test Party 3",
+          "amount": 1003,
+          "totalDebit": 0,
+          "totalCredit": 0,
+          "difference": 0,
+          "isBalanced": false,
+          "narration": "Test narration for transaction 3",
+          "entries": [],
+          "reviewRequired": true,
+          "reviewReasons": [
+            "No source ledger entries detected (missing ALLLEDGERENTRIES / LEDGERENTRIES / entries structure)"
+          ],
+          "sourceFile": "Test_DayBook.json",
+          "datasetId": "",
+          "traceability": {
+            "sourceFileType": "JSON",
+            "sourceFile": "Test_DayBook.json",
+            "jsonPath": "$.DayBook[2]",
+            "sourceField": "VCH-3"
+          }
+        },
+        {
+          "id": "JSON-V-4",
+          "voucherNumber": "VCH-4",
+          "voucherType": "Sales",
+          "date": "2025-05-15",
+          "partyLedger": "Test Party 4",
+          "amount": 1004,
+          "totalDebit": 0,
+          "totalCredit": 0,
+          "difference": 0,
+          "isBalanced": false,
+          "narration": "Test narration for transaction 4",
+          "entries": [],
+          "reviewRequired": true,
+          "reviewReasons": [
+            "No source ledger entries detected (missing ALLLEDGERENTRIES / LEDGERENTRIES / entries structure)"
+          ],
+          "sourceFile": "Test_DayBook.json",
+          "datasetId": "",
+          "traceability": {
+            "sourceFileType": "JSON",
+            "sourceFile": "Test_DayBook.json",
+            "jsonPath": "$.DayBook[3]",
+            "sourceField": "VCH-4"
+          }
+        },
+        {
+          "id": "JSON-V-5",
+          "voucherNumber": "VCH-5",
+          "voucherType": "Receipt",
+          "date": "2025-05-15",
+          "partyLedger": "Test Party 5",
+          "amount": 1005,
+          "totalDebit": 0,
+          "totalCredit": 0,
+          "difference": 0,
+          "isBalanced": false,
+          "narration": "Test narration for transaction 5",
+          "entries": [],
+          "reviewRequired": true,
+          "reviewReasons": [
+            "No source ledger entries detected (missing ALLLEDGERENTRIES / LEDGERENTRIES / entries structure)"
+          ],
+          "sourceFile": "Test_DayBook.json",
+          "datasetId": "",
+          "traceability": {
+            "sourceFileType": "JSON",
+            "sourceFile": "Test_DayBook.json",
+            "jsonPath": "$.DayBook[4]",
+            "sourceField": "VCH-5"
+          }
+        }
+      ],
+      "classifiedAs": "Voucher"
+    }
+  ]
+}

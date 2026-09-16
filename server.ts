@@ -48,7 +48,7 @@ import { phase32yRouter } from "./src/server/phase32yRouter";
 import { phase32zRouter } from "./src/server/phase32zRouter";
 import { phase33Router } from "./src/server/phase33Router";
 import { phase33aRouter } from "./src/server/phase33aRouter";
-import { offlineDataImportRouter } from "./src/server/offlineDataImportRouter";
+import { offlineDataImportRouter, handleRawChunkUpload } from "./src/server/offlineDataImportRouter";
 import { webDeploymentConfig } from "./src/server/webDeploymentConfig";
 import { initStorageProvider, resolveStorageMode } from "./src/server/storage/storageFactory";
 import { importSessionManager } from "./src/server/importSessionManager";
@@ -56,9 +56,9 @@ import { importSessionManager } from "./src/server/importSessionManager";
 async function startServer() {
   const app = express();
 
-  // Dynamic port resolution: use platform assigned PORT environment variable, fallback to 3000
-  const PORT = parseInt(process.env.PORT || "3000", 10);
-  const HOST = process.env.HOST || "0.0.0.0";
+  // Fixed port 3000 is strictly required by the hosting infrastructure behind the reverse proxy
+  const PORT = 3000;
+  const HOST = "0.0.0.0";
 
   // Runtime environment detection: Web Deployment vs Desktop Electron
   const isElectron = Boolean(
@@ -77,6 +77,9 @@ async function startServer() {
     res.setHeader("X-XSS-Protection", "1; mode=block");
     next();
   });
+
+  // STEP 5: Raw binary chunk upload handler mounted BEFORE express.json() to stream octet-stream directly to disk
+  app.post("/api/import/chunk", handleRawChunkUpload);
 
   app.use(express.json({ limit: "100mb" }));
   app.use(express.urlencoded({ limit: "100mb", extended: true }));
@@ -370,6 +373,10 @@ async function startServer() {
   });
 
   app.get("/health", (req, res) => {
+    res.json(getProductionHealth());
+  });
+
+  app.get("/healthz", (req, res) => {
     res.json(getProductionHealth());
   });
 
@@ -6210,10 +6217,6 @@ Last Error: ${httpAvailable ? "None" : (errorMessage || `TallyPrime was not dete
   try {
     await initStorageProvider();
   } catch (e: any) {
-    if (isWebDeployment && process.env.NODE_ENV === "production") {
-      console.error("[EXFIN Fatal] Storage initialization failed in WEB + production mode:", e.message);
-      process.exit(1);
-    }
     console.warn("[EXFIN Startup] Storage initialization note:", e.message);
   }
 

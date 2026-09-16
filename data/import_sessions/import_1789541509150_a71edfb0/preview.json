@@ -1,0 +1,108 @@
+{
+  "fileType": "JSON",
+  "fileName": "test_auto.json",
+  "fileSize": 118,
+  "detectedCompany": "Automated Chunk Test",
+  "detectedFinancialYear": {
+    "from": "2024-04-01",
+    "to": "2025-03-31",
+    "isDetected": true,
+    "status": "DETECTED",
+    "detectionSource": "Detected in Source Data",
+    "sourceType": "JSON",
+    "sourcePath": "$.FinancialYear",
+    "sourceField": "FinancialYear",
+    "sourceValue": "2024-2025"
+  },
+  "rawSampleData": {
+    "vouchers": [
+      {
+        "id": "JSON-V-1",
+        "voucherNumber": null,
+        "voucherType": "Sales",
+        "date": "2024-05-15",
+        "partyLedger": null,
+        "amount": null,
+        "totalDebit": 0,
+        "totalCredit": 0,
+        "difference": 0,
+        "isBalanced": false,
+        "narration": null,
+        "entries": [],
+        "reviewRequired": true,
+        "reviewReasons": [
+          "Missing voucher reference number",
+          "Missing or non-numeric amount in source record",
+          "No source ledger entries detected (missing ALLLEDGERENTRIES / LEDGERENTRIES / entries structure)"
+        ],
+        "sourceFile": "test_auto.json",
+        "datasetId": "",
+        "traceability": {
+          "sourceFileType": "JSON",
+          "sourceFile": "test_auto.json",
+          "jsonPath": "$.DayBook[0]",
+          "sourceField": "voucher[1]"
+        }
+      }
+    ],
+    "ledgers": [],
+    "groups": [],
+    "stockItems": []
+  },
+  "detectedEntities": [
+    {
+      "name": "Voucher Records",
+      "count": 1,
+      "fields": [
+        "id",
+        "voucherNumber",
+        "voucherType",
+        "date",
+        "partyLedger",
+        "amount",
+        "totalDebit",
+        "totalCredit",
+        "difference",
+        "isBalanced",
+        "narration",
+        "entries",
+        "reviewRequired",
+        "reviewReasons",
+        "sourceFile",
+        "datasetId",
+        "traceability"
+      ],
+      "sample": [
+        {
+          "id": "JSON-V-1",
+          "voucherNumber": null,
+          "voucherType": "Sales",
+          "date": "2024-05-15",
+          "partyLedger": null,
+          "amount": null,
+          "totalDebit": 0,
+          "totalCredit": 0,
+          "difference": 0,
+          "isBalanced": false,
+          "narration": null,
+          "entries": [],
+          "reviewRequired": true,
+          "reviewReasons": [
+            "Missing voucher reference number",
+            "Missing or non-numeric amount in source record",
+            "No source ledger entries detected (missing ALLLEDGERENTRIES / LEDGERENTRIES / entries structure)"
+          ],
+          "sourceFile": "test_auto.json",
+          "datasetId": "",
+          "traceability": {
+            "sourceFileType": "JSON",
+            "sourceFile": "test_auto.json",
+            "jsonPath": "$.DayBook[0]",
+            "sourceField": "voucher[1]"
+          }
+        }
+      ],
+      "classifiedAs": "Voucher"
+    }
+  ]
+}

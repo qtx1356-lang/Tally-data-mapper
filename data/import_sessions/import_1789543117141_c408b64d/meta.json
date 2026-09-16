@@ -1,0 +1,36 @@
+{
+  "sessionId": "import_1789543117141_c408b64d",
+  "createdAt": "2026-09-16T07:18:37.141Z",
+  "updatedAt": "2026-09-16T07:18:37.658Z",
+  "status": "PARSED",
+  "fileName": "MultiChunk_Test.json",
+  "fileType": "JSON",
+  "fileSize": 4185661,
+  "progress": {
+    "phase": "Completed",
+    "recordsProcessed": 0,
+    "percent": 100,
+    "message": "Parsing and validation complete"
+  },
+  "detectedCompany": null,
+  "detectedFinancialYear": {
+    "from": "2025-04-01",
+    "to": "2026-03-31",
+    "isDetected": true,
+    "status": "DETECTED",
+    "detectionSource": "Detected in Source Data",
+    "sourceType": "JSON",
+    "sourcePath": "$.Header.FinancialYear",
+    "sourceField": "FinancialYear",
+    "sourceValue": "2025-04-01 to 2026-03-31"
+  },
+  "counts": {
+    "vouchers": 0,
+    "ledgers": 0,
+    "stockItems": 0,
+    "totalDebit": 0,
+    "totalCredit": 0
+  },
+  "isBalanced": true,
+  "balanceDifference": 0
+}

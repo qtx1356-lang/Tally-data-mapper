@@ -19,6 +19,7 @@ import {
   SourceTraceability 
 } from '../types/offlineDataImport';
 import { normalizeDebitCredit } from './debitCreditNormalization';
+import { detectStreamStructure, TallyStructureDiagnostic, normalizeKey } from './tallyJsonStructureDetector';
 
 export interface StreamingParseProgress {
   phase: 'Uploading' | 'Processing' | 'Normalizing' | 'Mapping' | 'Quality Check' | 'Finalizing' | 'Completed' | 'Failed';
@@ -134,6 +135,42 @@ export class StreamingJsonParser {
 
     let lastProgressReportTime = Date.now();
 
+    function unwrapVal(val: any): any {
+      if (val === undefined || val === null || val === '') return null;
+      if (Array.isArray(val)) {
+        if (val.length === 0) return null;
+        return unwrapVal(val[0]);
+      }
+      if (typeof val === 'object') {
+        if (val['#text'] !== undefined) return unwrapVal(val['#text']);
+        if (val['_text'] !== undefined) return unwrapVal(val['_text']);
+        if (val['$'] !== undefined && typeof val['$'] !== 'object') return unwrapVal(val['$']);
+        if (val['value'] !== undefined) return unwrapVal(val['value']);
+        if (val['Value'] !== undefined) return unwrapVal(val['Value']);
+      }
+      return val;
+    }
+
+    function findField(obj: any, candidates: string[]): any {
+      if (!obj || typeof obj !== 'object') return null;
+      for (const c of candidates) {
+        if (obj[c] !== undefined && obj[c] !== null && obj[c] !== '') {
+          return unwrapVal(obj[c]);
+        }
+      }
+      const normCandidates = candidates.map(c => normalizeKey(c));
+      for (const key of Object.keys(obj)) {
+        const normK = normalizeKey(key);
+        if (normCandidates.includes(normK)) {
+          const val = unwrapVal(obj[key]);
+          if (val !== null && val !== undefined && val !== '') {
+            return val;
+          }
+        }
+      }
+      return null;
+    }
+
     const processSingleVoucherObject = (rawObjInput: string | any, itemPath?: string) => {
       let rawVch: any;
       if (typeof rawObjInput === 'string') {
@@ -151,67 +188,60 @@ export class StreamingJsonParser {
         return;
       }
 
-      // Check if this object contains an array of vouchers or messages
-      if (Array.isArray(rawVch.VOUCHER)) {
-        rawVch.VOUCHER.forEach((subVch: any, subIdx: number) => {
-          const subPath = itemPath ? `${itemPath}.VOUCHER[${subIdx}]` : `VOUCHER[${subIdx}]`;
-          processSingleVoucherObject(subVch, subPath);
-        });
-        return;
-      }
-      if (Array.isArray(rawVch.voucher)) {
-        rawVch.voucher.forEach((subVch: any, subIdx: number) => {
-          const subPath = itemPath ? `${itemPath}.voucher[${subIdx}]` : `voucher[${subIdx}]`;
-          processSingleVoucherObject(subVch, subPath);
-        });
-        return;
-      }
-      if (Array.isArray(rawVch.TALLYMESSAGE)) {
-        rawVch.TALLYMESSAGE.forEach((subMsg: any, subIdx: number) => {
-          const subPath = itemPath ? `${itemPath}.TALLYMESSAGE[${subIdx}]` : `TALLYMESSAGE[${subIdx}]`;
-          processSingleVoucherObject(subMsg, subPath);
-        });
-        return;
-      }
-      if (Array.isArray(rawVch.TRANSACTIONS)) {
-        rawVch.TRANSACTIONS.forEach((subTx: any, subIdx: number) => {
-          const subPath = itemPath ? `${itemPath}.TRANSACTIONS[${subIdx}]` : `TRANSACTIONS[${subIdx}]`;
-          processSingleVoucherObject(subTx, subPath);
-        });
-        return;
-      }
-      if (Array.isArray(rawVch.DayBook) || Array.isArray(rawVch.DAYBOOK) || Array.isArray(rawVch.daybook)) {
-        const dbArr = rawVch.DayBook || rawVch.DAYBOOK || rawVch.daybook;
-        dbArr.forEach((subDb: any, subIdx: number) => {
-          const subPath = itemPath ? `${itemPath}.DayBook[${subIdx}]` : `DayBook[${subIdx}]`;
-          processSingleVoucherObject(subDb, subPath);
-        });
-        return;
+      // Check if this object contains an array of vouchers, transactions, or records
+      const possibleArrayKeys = [
+        'VOUCHER', 'voucher', 'Voucher', 'Vouchers', 'vouchers', 'VOUCHERS',
+        'TRANSACTIONS', 'transactions', 'Transactions', 'Transaction', 'transaction',
+        'TALLYMESSAGE', 'tallymessage',
+        'DayBook', 'DAYBOOK', 'daybook', 'Daybook',
+        'records', 'Records', 'RECORDS',
+        'items', 'Items', 'ITEMS',
+        'rows', 'Rows', 'ROWS',
+        'data', 'Data', 'DATA'
+      ];
+      for (const arrKey of possibleArrayKeys) {
+        if (Array.isArray(rawVch[arrKey])) {
+          rawVch[arrKey].forEach((subItem: any, subIdx: number) => {
+            const subPath = itemPath ? `${itemPath}.${arrKey}[${subIdx}]` : `${arrKey}[${subIdx}]`;
+            processSingleVoucherObject(subItem, subPath);
+          });
+          return;
+        }
       }
 
       // Header metadata extraction from object if present
       if (!detectedCompany) {
-        const comp = rawVch.COMPANY || rawVch.companyName || rawVch.company || rawVch.NAME;
+        const comp = findField(rawVch, ['Company', 'COMPANY', 'companyName', 'company', 'NAME', 'Name']);
         if (typeof comp === 'string' && comp.trim()) detectedCompany = comp.trim();
       }
       if (!rawStartingFrom) {
-        const sf = rawVch.STARTINGFROM || rawVch.from || rawVch.startDate || rawVch.fromPeriod;
+        const sf = findField(rawVch, ['STARTINGFROM', 'StartingFrom', 'from', 'From', 'startDate', 'fromPeriod', 'FROMDATE']);
         if (typeof sf === 'string' && sf.trim()) rawStartingFrom = sf.trim();
       }
       if (!rawEndingAt) {
-        const ea = rawVch.ENDINGAT || rawVch.to || rawVch.endDate || rawVch.toPeriod;
+        const ea = findField(rawVch, ['ENDINGAT', 'EndingAt', 'to', 'To', 'endDate', 'toPeriod', 'TODATE']);
         if (typeof ea === 'string' && ea.trim()) rawEndingAt = ea.trim();
       }
       if (!rawFyFrom) {
-        const ff = rawVch.financialYearFrom;
+        const ff = findField(rawVch, ['financialYearFrom', 'FinancialYearFrom', 'financial_year_from', 'fyFrom', 'FYFrom']);
         if (typeof ff === 'string' && ff.trim()) rawFyFrom = ff.trim();
       }
       if (!rawFyTo) {
-        const ft = rawVch.financialYearTo;
+        const ft = findField(rawVch, ['financialYearTo', 'FinancialYearTo', 'financial_year_to', 'fyTo', 'FYTo']);
         if (typeof ft === 'string' && ft.trim()) rawFyTo = ft.trim();
       }
+      if (!rawFyFrom && !rawFyTo) {
+        const fyVal = findField(rawVch, ['FinancialYear', 'Financial Year', 'financialYear', 'financial_year', 'FY', 'FYear', 'FiscalYear', 'Fiscal Year']);
+        if (typeof fyVal === 'string' && fyVal.trim()) {
+          const parsedRange = StreamingJsonParser.parseRangeString(fyVal.trim());
+          if (parsedRange) {
+            rawFyFrom = parsedRange.from;
+            rawFyTo = parsedRange.to;
+          }
+        }
+      }
 
-      // Check if wrapped voucher e.g. { "VOUCHER": { ... } } or { "voucher": { ... } } or { "DAYBOOK": { ... } } or { "TALLYMESSAGE": { "VOUCHER": { ... } } }
+      // Check if wrapped voucher e.g. { "VOUCHER": { ... } } or { "DAYBOOK": { ... } } or { "TALLYMESSAGE": { "VOUCHER": { ... } } }
       let isWrapped = false;
       let wrapperKey: string | null = null;
       let v: any = rawVch;
@@ -276,49 +306,51 @@ export class StreamingJsonParser {
         wrapperKey = wrapperKey ? `${wrapperKey}.voucher` : 'voucher';
       }
 
-      // Check if this is a Master record (LEDGER, GROUP, STOCKITEM, COMPANY, CURRENCY, UNIT) rather than a voucher
+      // Check if this is a pure Master record (LEDGER, GROUP, STOCKITEM, COMPANY, CURRENCY, UNIT) rather than a voucher
       if (v.LEDGER || v.ledger || v.GROUP || v.group || v.STOCKITEM || v.stockItem || v.CURRENCY || v.UNIT) {
         if (!v.VOUCHER && !v.voucher && !v.voucherNumber && !v.VOUCHERNUMBER && !v.vchNo && !v.lines && !v.entries && !v.ALLLEDGERENTRIES && !v['ALLLEDGERENTRIES.LIST']) {
           return; // Skip master entities cleanly
         }
       }
 
-      // Helper to find first defined value across candidate keys
-      const firstVal = (...candidates: any[]) => {
-        for (const c of candidates) {
-          if (c !== undefined && c !== null && c !== '') return c;
-        }
-        return null;
-      };
-
       // Check if object is a candidate voucher object
-      const vchNumberRaw = firstVal(
-        v.VoucherNumber, v.voucherNumber, v.VOUCHERNUMBER, v.Vouchernumber,
-        v.Voucher_Number, v.voucher_number, v.VoucherNo, v.voucherNo, v.VOUCHERNO,
-        v.VchNo, v.vchNo, v.VCHNO, v.InvoiceNo, v.invoiceNo, v.INVOICENO,
-        v.DocNo, v.docNo, v.Reference, v.reference, v.RefNo, v.refNo,
-        v.Number, v.number, v.id
-      );
+      const vchNumberRaw = findField(v, [
+        'VoucherNumber', 'voucherNumber', 'VOUCHERNUMBER', 'Vouchernumber',
+        'Voucher_Number', 'voucher_number', 'VoucherNo', 'voucherNo', 'VOUCHERNO',
+        'VchNo', 'vchNo', 'VCHNO', 'Vch No', 'Vch No.', 'Vch. No.', 'Voucher No', 'Voucher No.',
+        'vch_no', 'voucher_no', 'InvoiceNo', 'invoiceNo', 'INVOICENO',
+        'DocNo', 'docNo', 'Reference', 'reference', 'RefNo', 'refNo',
+        'Number', 'number', 'id', 'GUID', 'guid', 'ALTERID', 'alterId', 'MASTERID', 'masterId'
+      ]);
       
-      const vchTypeRaw = firstVal(
-        v.VoucherType, v.voucherType, v.VOUCHERTYPENAME, v.VOUCHERTYPE,
-        v.Vouchertype, v.Voucher_Type, v.voucher_type, v.VchType, v.vchType,
-        v.VCHTYPE, v.Type, v.type, v.TYPE, v.TransactionType, v.transactionType
-      );
+      const vchTypeRaw = findField(v, [
+        'VoucherType', 'voucherType', 'VOUCHERTYPENAME', 'VOUCHERTYPE',
+        'Vouchertype', 'Voucher_Type', 'voucher_type', 'VchType', 'vchType',
+        'VCHTYPE', 'Vch Type', 'Voucher Type', 'VCH TYPE', 'VOUCHER TYPE',
+        'Type', 'type', 'TYPE', 'TransactionType', 'transactionType',
+        '@_VCHTYPE', '@VCHTYPE'
+      ]);
 
-      const rawDate = firstVal(
-        v.Date, v.date, v.DATE, v.VoucherDate, v.voucherDate, v.VOUCHERDATE,
-        v.TxDate, v.txDate, v.TxnDate, v.txnDate, v.EffectiveDate, v.effectiveDate
-      );
+      const rawDate = findField(v, [
+        'Date', 'date', 'DATE', 'VoucherDate', 'voucherDate', 'VOUCHERDATE',
+        'TxDate', 'txDate', 'TxnDate', 'txnDate', 'EffectiveDate', 'effectiveDate',
+        'Vch Date', 'Vch Date.', 'Date_Formatted', '@_DATE', '@DATE'
+      ]);
 
-      const partyNameRaw = v.PartyLedgerName || v.partyLedgerName || v.PARTYLEDGERNAME ||
-                           v.PartyLedger || v.partyLedger || v.PARTYLEDGER ||
-                           v.PartyName || v.partyName || v.Party || v.party ||
-                           v.Particulars || v.particulars || v.customerName || null;
+      const partyNameRaw = findField(v, [
+        'PartyLedgerName', 'partyLedgerName', 'PARTYLEDGERNAME',
+        'PartyLedger', 'partyLedger', 'PARTYLEDGER',
+        'PartyName', 'partyName', 'Party', 'party',
+        'Particulars', 'particulars', 'PARTICULARS',
+        'LedgerName', 'ledgerName', 'LEDGERNAME',
+        'Account', 'account', 'customerName', 'Party Ledger', 'Party Name'
+      ]);
 
-      const narrationRaw = v.Narration || v.narration || v.NARRATION || 
-                            v.Remarks || v.remarks || v.REMARKS || 
-                            v.Description || v.description || v.Notes || v.notes || null;
+      const narrationRaw = findField(v, [
+        'Narration', 'narration', 'NARRATION',
+        'Remarks', 'remarks', 'REMARKS',
+        'Description', 'description', 'Notes', 'notes'
+      ]);
 
       const hasEntries = Boolean(
         Array.isArray(v.entries) || (v.entries && typeof v.entries === 'object') ||
@@ -333,7 +365,15 @@ export class StreamingJsonParser {
         Array.isArray(v['ALLINVENTORYENTRIES.LIST']) || Array.isArray(v.ALLINVENTORYENTRIES)
       );
 
-      const isVoucherCandidate = Boolean(vchNumberRaw || vchTypeRaw || rawDate || partyNameRaw || narrationRaw || hasEntries);
+      // Check flat DayBook row amounts (Debit, Credit, Amount, Net Amount)
+      const flatDebitRaw = findField(v, ['Debit', 'debit', 'DEBIT', 'Debit Amount', 'Debit amount', 'DEBIT AMOUNT', 'Dr', 'dr']);
+      const flatCreditRaw = findField(v, ['Credit', 'credit', 'CREDIT', 'Credit Amount', 'Credit amount', 'CREDIT AMOUNT', 'Cr', 'cr']);
+      const flatAmtRaw = findField(v, ['Amount', 'amount', 'AMOUNT', 'NetAmount', 'net_amount', 'Total', 'total']);
+      const hasFlatAmount = flatDebitRaw !== null || flatCreditRaw !== null || flatAmtRaw !== null;
+
+      const isVoucherCandidate = Boolean(
+        vchNumberRaw || vchTypeRaw || rawDate || (partyNameRaw && hasFlatAmount) || hasEntries || (rawDate && hasFlatAmount)
+      );
 
       if (!isVoucherCandidate) {
         return; // Skip non-voucher metadata objects
@@ -461,6 +501,26 @@ export class StreamingJsonParser {
             rawEntries.push(allocs);
             rawEntriesPathSegments = ['ALLINVENTORYENTRIES.LIST', 'ACCOUNTINGALLOCATIONS.LIST'];
           }
+        }
+      }
+
+      // Check flat DayBook row entries (Debit, Credit, Amount columns directly on voucher object)
+      if (rawEntries.length === 0) {
+        const flatDebit = findField(v, ['Debit', 'debit', 'DEBIT', 'Debit Amount', 'Debit amount', 'DEBIT AMOUNT', 'Dr', 'dr']);
+        const flatCredit = findField(v, ['Credit', 'credit', 'CREDIT', 'Credit Amount', 'Credit amount', 'CREDIT AMOUNT', 'Cr', 'cr']);
+        const flatAmt = findField(v, ['Amount', 'amount', 'AMOUNT', 'NetAmount', 'net_amount', 'Total', 'total']);
+
+        if (flatDebit !== null || flatCredit !== null || flatAmt !== null) {
+          rawEntries.push({
+            LedgerName: partyNameRaw || 'General Account',
+            Debit: flatDebit,
+            Credit: flatCredit,
+            Amount: flatAmt,
+            IsDebit: flatDebit !== null && Number(flatDebit) > 0 ? true : undefined,
+            IsCredit: flatCredit !== null && Number(flatCredit) > 0 ? true : undefined,
+            IsDeemedPositive: v.IsDeemedPositive || v.isDeemedPositive || v.ISDEEMEDPOSITIVE
+          });
+          rawEntriesPathSegments = [];
         }
       }
 
@@ -731,16 +791,26 @@ export class StreamingJsonParser {
                   const compMatch = headerBuffer.match(/"(?:COMPANY|companyName|company|NAME)"\s*:\s*"([^"]+)"/i);
                   if (compMatch && !detectedCompany) detectedCompany = compMatch[1].trim();
 
-                  const startMatch = headerBuffer.match(/"(?:STARTINGFROM|from|startDate|fromPeriod)"\s*:\s*"([^"]+)"/i);
+                  // Direct combined Financial Year range string e.g. "FinancialYear": "2025-04-01 to 2026-03-31"
+                  const fyCombinedMatch = headerBuffer.match(/"(?:FinancialYear|Financial\s*Year|financialYear|financial_year|FY|FYear|FiscalYear|Fiscal_Year)"\s*:\s*"([^"]+)"/i);
+                  if (fyCombinedMatch) {
+                    const parsedRange = StreamingJsonParser.parseRangeString(fyCombinedMatch[1].trim());
+                    if (parsedRange) {
+                      if (!rawFyFrom) rawFyFrom = parsedRange.from;
+                      if (!rawFyTo) rawFyTo = parsedRange.to;
+                    }
+                  }
+
+                  const startMatch = headerBuffer.match(/"(?:STARTINGFROM|from|startDate|fromPeriod|FROMDATE|fromDate|FromDate)"\s*:\s*"([^"]+)"/i);
                   if (startMatch && !rawStartingFrom) rawStartingFrom = startMatch[1].trim();
 
-                  const endMatch = headerBuffer.match(/"(?:ENDINGAT|to|endDate|toPeriod)"\s*:\s*"([^"]+)"/i);
+                  const endMatch = headerBuffer.match(/"(?:ENDINGAT|to|endDate|toPeriod|TODATE|toDate|ToDate)"\s*:\s*"([^"]+)"/i);
                   if (endMatch && !rawEndingAt) rawEndingAt = endMatch[1].trim();
 
-                  const fyFromMatch = headerBuffer.match(/"financialYearFrom"\s*:\s*"([^"]+)"/i);
+                  const fyFromMatch = headerBuffer.match(/"(?:financialYearFrom|FinancialYearFrom|financial_year_from|fyFrom|FYFrom)"\s*:\s*"([^"]+)"/i);
                   if (fyFromMatch && !rawFyFrom) rawFyFrom = fyFromMatch[1].trim();
 
-                  const fyToMatch = headerBuffer.match(/"financialYearTo"\s*:\s*"([^"]+)"/i);
+                  const fyToMatch = headerBuffer.match(/"(?:financialYearTo|FinancialYearTo|financial_year_to|fyTo|FYTo)"\s*:\s*"([^"]+)"/i);
                   if (fyToMatch && !rawFyTo) rawFyTo = fyToMatch[1].trim();
                 }
               } else {
@@ -813,12 +883,22 @@ export class StreamingJsonParser {
         }
       });
 
-      readStream.on('end', () => {
+      readStream.on('end', async () => {
         if (objectDepth > 0 || inString || (state === 'IN_ARRAY' && arrayDepth > 0)) {
           return reject(new Error(`Invalid JSON in ${fileName} (phase: Processing) at byte ${byteOffset}, line ${lineNum}, column ${colNum}, path ${detectedContainerPath}: unexpected end of stream with unclosed syntax`));
         }
-        if (totalVouchers === 0 && state === 'HEADER') {
-          return reject(new Error(`Invalid Tally JSON data in ${fileName}: no vouchers found in source JSON structure`));
+        if (totalVouchers === 0) {
+          try {
+            const diagnostic = await detectStreamStructure(filePath);
+            const customErr: any = new Error(`Invalid Tally JSON data in ${fileName}: no vouchers found in source JSON`);
+            customErr.code = 'NO_VOUCHERS_FOUND';
+            customErr.diagnostic = diagnostic;
+            return reject(customErr);
+          } catch (diagErr) {
+            const customErr: any = new Error(`Invalid Tally JSON data in ${fileName}: no vouchers found in source JSON`);
+            customErr.code = 'NO_VOUCHERS_FOUND';
+            return reject(customErr);
+          }
         }
         resolve();
       });
@@ -936,7 +1016,22 @@ export class StreamingJsonParser {
     if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) {
       return trimmed;
     }
+    if (/^\d{2}[-/.]\d{2}[-/.]\d{4}$/.test(trimmed)) {
+      const parts = trimmed.split(/[-/.]/);
+      return `${parts[2]}-${parts[1].padStart(2, '0')}-${parts[0].padStart(2, '0')}`;
+    }
     return trimmed;
+  }
+
+  private static parseRangeString(val: string): { from: string; to: string } | null {
+    if (!val) return null;
+    const parts = val.split(/\s*(?:to|-|—)\s*/i).map(s => s.trim()).filter(Boolean);
+    if (parts.length >= 2) {
+      const f = StreamingJsonParser.normalizeDateString(parts[0]);
+      const t = StreamingJsonParser.normalizeDateString(parts[1]);
+      if (f && t) return { from: f, to: t };
+    }
+    return null;
   }
 
   /**

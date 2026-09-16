@@ -1,0 +1,36 @@
+{
+  "sessionId": "import_1789542936230_745f51b9",
+  "createdAt": "2026-09-16T07:15:36.230Z",
+  "updatedAt": "2026-09-16T07:15:36.233Z",
+  "status": "PARSED",
+  "fileName": "EXFIN_Demo_Tally_Data.json",
+  "fileType": "JSON",
+  "fileSize": 2079,
+  "progress": {
+    "phase": "Completed",
+    "recordsProcessed": 0,
+    "percent": 100,
+    "message": "Parsing and validation complete"
+  },
+  "detectedCompany": "[DEMO DATA] Quantum Retailers Limited",
+  "detectedFinancialYear": {
+    "from": "2024-04-01",
+    "to": "2025-03-31",
+    "isDetected": true,
+    "status": "DETECTED",
+    "detectionSource": "Detected in Source Data",
+    "sourceType": "JSON",
+    "sourcePath": "$.financialYear",
+    "sourceField": "financialYear.from / to",
+    "sourceValue": "2024-04-01 - 2025-03-31"
+  },
+  "counts": {
+    "vouchers": 0,
+    "ledgers": 0,
+    "stockItems": 0,
+    "totalDebit": 0,
+    "totalCredit": 0
+  },
+  "isBalanced": true,
+  "balanceDifference": 0
+}

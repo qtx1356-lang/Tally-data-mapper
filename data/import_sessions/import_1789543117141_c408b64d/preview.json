@@ -1,0 +1,442 @@
+{
+  "fileType": "JSON",
+  "fileName": "MultiChunk_Test.json",
+  "fileSize": 4185661,
+  "detectedCompany": null,
+  "detectedFinancialYear": {
+    "from": "2025-04-01",
+    "to": "2026-03-31",
+    "isDetected": true,
+    "status": "DETECTED",
+    "detectionSource": "Detected in Source Data",
+    "sourceType": "JSON",
+    "sourcePath": "$.Header.FinancialYear",
+    "sourceField": "FinancialYear",
+    "sourceValue": "2025-04-01 to 2026-03-31"
+  },
+  "rawSampleData": {
+    "vouchers": [
+      {
+        "id": "JSON-V-1",
+        "voucherNumber": "VCH-1",
+        "voucherType": "Purchase",
+        "date": "2025-02-15",
+        "partyLedger": "Gupta Traders",
+        "amount": 1512.5,
+        "totalDebit": 0,
+        "totalCredit": 0,
+        "difference": 0,
+        "isBalanced": false,
+        "narration": "Diagnostic test transaction 1 with ledger audit reconciliation for 3.5MB test.",
+        "entries": [],
+        "reviewRequired": true,
+        "reviewReasons": [
+          "No source ledger entries detected (missing ALLLEDGERENTRIES / LEDGERENTRIES / entries structure)"
+        ],
+        "sourceFile": "MultiChunk_Test.json",
+        "datasetId": "",
+        "traceability": {
+          "sourceFileType": "JSON",
+          "sourceFile": "MultiChunk_Test.json",
+          "jsonPath": "$.DayBook[0]",
+          "sourceField": "VCH-1"
+        }
+      },
+      {
+        "id": "JSON-V-2",
+        "voucherNumber": "VCH-2",
+        "voucherType": "Receipt",
+        "date": "2025-03-15",
+        "partyLedger": "Apex Logistics",
+        "amount": 1525,
+        "totalDebit": 0,
+        "totalCredit": 0,
+        "difference": 0,
+        "isBalanced": false,
+        "narration": "Diagnostic test transaction 2 with ledger audit reconciliation for 3.5MB test.",
+        "entries": [],
+        "reviewRequired": true,
+        "reviewReasons": [
+          "No source ledger entries detected (missing ALLLEDGERENTRIES / LEDGERENTRIES / entries structure)"
+        ],
+        "sourceFile": "MultiChunk_Test.json",
+        "datasetId": "",
+        "traceability": {
+          "sourceFileType": "JSON",
+          "sourceFile": "MultiChunk_Test.json",
+          "jsonPath": "$.DayBook[1]",
+          "sourceField": "VCH-2"
+        }
+      },
+      {
+        "id": "JSON-V-3",
+        "voucherNumber": "VCH-3",
+        "voucherType": "Payment",
+        "date": "2025-04-15",
+        "partyLedger": "Reliable Tech",
+        "amount": 1537.5,
+        "totalDebit": 0,
+        "totalCredit": 0,
+        "difference": 0,
+        "isBalanced": false,
+        "narration": "Diagnostic test transaction 3 with ledger audit reconciliation for 3.5MB test.",
+        "entries": [],
+        "reviewRequired": true,
+        "reviewReasons": [
+          "No source ledger entries detected (missing ALLLEDGERENTRIES / LEDGERENTRIES / entries structure)"
+        ],
+        "sourceFile": "MultiChunk_Test.json",
+        "datasetId": "",
+        "traceability": {
+          "sourceFileType": "JSON",
+          "sourceFile": "MultiChunk_Test.json",
+          "jsonPath": "$.DayBook[2]",
+          "sourceField": "VCH-3"
+        }
+      },
+      {
+        "id": "JSON-V-4",
+        "voucherNumber": "VCH-4",
+        "voucherType": "Sales",
+        "date": "2025-05-15",
+        "partyLedger": "Zenith Motors",
+        "amount": 1550,
+        "totalDebit": 0,
+        "totalCredit": 0,
+        "difference": 0,
+        "isBalanced": false,
+        "narration": "Diagnostic test transaction 4 with ledger audit reconciliation for 3.5MB test.",
+        "entries": [],
+        "reviewRequired": true,
+        "reviewReasons": [
+          "No source ledger entries detected (missing ALLLEDGERENTRIES / LEDGERENTRIES / entries structure)"
+        ],
+        "sourceFile": "MultiChunk_Test.json",
+        "datasetId": "",
+        "traceability": {
+          "sourceFileType": "JSON",
+          "sourceFile": "MultiChunk_Test.json",
+          "jsonPath": "$.DayBook[3]",
+          "sourceField": "VCH-4"
+        }
+      },
+      {
+        "id": "JSON-V-5",
+        "voucherNumber": "VCH-5",
+        "voucherType": "Purchase",
+        "date": "2025-06-15",
+        "partyLedger": "National Stores",
+        "amount": 1562.5,
+        "totalDebit": 0,
+        "totalCredit": 0,
+        "difference": 0,
+        "isBalanced": false,
+        "narration": "Diagnostic test transaction 5 with ledger audit reconciliation for 3.5MB test.",
+        "entries": [],
+        "reviewRequired": true,
+        "reviewReasons": [
+          "No source ledger entries detected (missing ALLLEDGERENTRIES / LEDGERENTRIES / entries structure)"
+        ],
+        "sourceFile": "MultiChunk_Test.json",
+        "datasetId": "",
+        "traceability": {
+          "sourceFileType": "JSON",
+          "sourceFile": "MultiChunk_Test.json",
+          "jsonPath": "$.DayBook[4]",
+          "sourceField": "VCH-5"
+        }
+      },
+      {
+        "id": "JSON-V-6",
+        "voucherNumber": "VCH-6",
+        "voucherType": "Receipt",
+        "date": "2025-07-15",
+        "partyLedger": "Sharma Enterprises",
+        "amount": 1575,
+        "totalDebit": 0,
+        "totalCredit": 0,
+        "difference": 0,
+        "isBalanced": false,
+        "narration": "Diagnostic test transaction 6 with ledger audit reconciliation for 3.5MB test.",
+        "entries": [],
+        "reviewRequired": true,
+        "reviewReasons": [
+          "No source ledger entries detected (missing ALLLEDGERENTRIES / LEDGERENTRIES / entries structure)"
+        ],
+        "sourceFile": "MultiChunk_Test.json",
+        "datasetId": "",
+        "traceability": {
+          "sourceFileType": "JSON",
+          "sourceFile": "MultiChunk_Test.json",
+          "jsonPath": "$.DayBook[5]",
+          "sourceField": "VCH-6"
+        }
+      },
+      {
+        "id": "JSON-V-7",
+        "voucherNumber": "VCH-7",
+        "voucherType": "Payment",
+        "date": "2025-08-15",
+        "partyLedger": "Gupta Traders",
+        "amount": 1587.5,
+        "totalDebit": 0,
+        "totalCredit": 0,
+        "difference": 0,
+        "isBalanced": false,
+        "narration": "Diagnostic test transaction 7 with ledger audit reconciliation for 3.5MB test.",
+        "entries": [],
+        "reviewRequired": true,
+        "reviewReasons": [
+          "No source ledger entries detected (missing ALLLEDGERENTRIES / LEDGERENTRIES / entries structure)"
+        ],
+        "sourceFile": "MultiChunk_Test.json",
+        "datasetId": "",
+        "traceability": {
+          "sourceFileType": "JSON",
+          "sourceFile": "MultiChunk_Test.json",
+          "jsonPath": "$.DayBook[6]",
+          "sourceField": "VCH-7"
+        }
+      },
+      {
+        "id": "JSON-V-8",
+        "voucherNumber": "VCH-8",
+        "voucherType": "Sales",
+        "date": "2025-09-15",
+        "partyLedger": "Apex Logistics",
+        "amount": 1600,
+        "totalDebit": 0,
+        "totalCredit": 0,
+        "difference": 0,
+        "isBalanced": false,
+        "narration": "Diagnostic test transaction 8 with ledger audit reconciliation for 3.5MB test.",
+        "entries": [],
+        "reviewRequired": true,
+        "reviewReasons": [
+          "No source ledger entries detected (missing ALLLEDGERENTRIES / LEDGERENTRIES / entries structure)"
+        ],
+        "sourceFile": "MultiChunk_Test.json",
+        "datasetId": "",
+        "traceability": {
+          "sourceFileType": "JSON",
+          "sourceFile": "MultiChunk_Test.json",
+          "jsonPath": "$.DayBook[7]",
+          "sourceField": "VCH-8"
+        }
+      },
+      {
+        "id": "JSON-V-9",
+        "voucherNumber": "VCH-9",
+        "voucherType": "Purchase",
+        "date": "2025-10-15",
+        "partyLedger": "Reliable Tech",
+        "amount": 1612.5,
+        "totalDebit": 0,
+        "totalCredit": 0,
+        "difference": 0,
+        "isBalanced": false,
+        "narration": "Diagnostic test transaction 9 with ledger audit reconciliation for 3.5MB test.",
+        "entries": [],
+        "reviewRequired": true,
+        "reviewReasons": [
+          "No source ledger entries detected (missing ALLLEDGERENTRIES / LEDGERENTRIES / entries structure)"
+        ],
+        "sourceFile": "MultiChunk_Test.json",
+        "datasetId": "",
+        "traceability": {
+          "sourceFileType": "JSON",
+          "sourceFile": "MultiChunk_Test.json",
+          "jsonPath": "$.DayBook[8]",
+          "sourceField": "VCH-9"
+        }
+      },
+      {
+        "id": "JSON-V-10",
+        "voucherNumber": "VCH-10",
+        "voucherType": "Receipt",
+        "date": "2025-11-15",
+        "partyLedger": "Zenith Motors",
+        "amount": 1625,
+        "totalDebit": 0,
+        "totalCredit": 0,
+        "difference": 0,
+        "isBalanced": false,
+        "narration": "Diagnostic test transaction 10 with ledger audit reconciliation for 3.5MB test.",
+        "entries": [],
+        "reviewRequired": true,
+        "reviewReasons": [
+          "No source ledger entries detected (missing ALLLEDGERENTRIES / LEDGERENTRIES / entries structure)"
+        ],
+        "sourceFile": "MultiChunk_Test.json",
+        "datasetId": "",
+        "traceability": {
+          "sourceFileType": "JSON",
+          "sourceFile": "MultiChunk_Test.json",
+          "jsonPath": "$.DayBook[9]",
+          "sourceField": "VCH-10"
+        }
+      }
+    ],
+    "ledgers": [],
+    "groups": [],
+    "stockItems": []
+  },
+  "detectedEntities": [
+    {
+      "name": "Voucher Records",
+      "count": 15000,
+      "fields": [
+        "id",
+        "voucherNumber",
+        "voucherType",
+        "date",
+        "partyLedger",
+        "amount",
+        "totalDebit",
+        "totalCredit",
+        "difference",
+        "isBalanced",
+        "narration",
+        "entries",
+        "reviewRequired",
+        "reviewReasons",
+        "sourceFile",
+        "datasetId",
+        "traceability"
+      ],
+      "sample": [
+        {
+          "id": "JSON-V-1",
+          "voucherNumber": "VCH-1",
+          "voucherType": "Purchase",
+          "date": "2025-02-15",
+          "partyLedger": "Gupta Traders",
+          "amount": 1512.5,
+          "totalDebit": 0,
+          "totalCredit": 0,
+          "difference": 0,
+          "isBalanced": false,
+          "narration": "Diagnostic test transaction 1 with ledger audit reconciliation for 3.5MB test.",
+          "entries": [],
+          "reviewRequired": true,
+          "reviewReasons": [
+            "No source ledger entries detected (missing ALLLEDGERENTRIES / LEDGERENTRIES / entries structure)"
+          ],
+          "sourceFile": "MultiChunk_Test.json",
+          "datasetId": "",
+          "traceability": {
+            "sourceFileType": "JSON",
+            "sourceFile": "MultiChunk_Test.json",
+            "jsonPath": "$.DayBook[0]",
+            "sourceField": "VCH-1"
+          }
+        },
+        {
+          "id": "JSON-V-2",
+          "voucherNumber": "VCH-2",
+          "voucherType": "Receipt",
+          "date": "2025-03-15",
+          "partyLedger": "Apex Logistics",
+          "amount": 1525,
+          "totalDebit": 0,
+          "totalCredit": 0,
+          "difference": 0,
+          "isBalanced": false,
+          "narration": "Diagnostic test transaction 2 with ledger audit reconciliation for 3.5MB test.",
+          "entries": [],
+          "reviewRequired": true,
+          "reviewReasons": [
+            "No source ledger entries detected (missing ALLLEDGERENTRIES / LEDGERENTRIES / entries structure)"
+          ],
+          "sourceFile": "MultiChunk_Test.json",
+          "datasetId": "",
+          "traceability": {
+            "sourceFileType": "JSON",
+            "sourceFile": "MultiChunk_Test.json",
+            "jsonPath": "$.DayBook[1]",
+            "sourceField": "VCH-2"
+          }
+        },
+        {
+          "id": "JSON-V-3",
+          "voucherNumber": "VCH-3",
+          "voucherType": "Payment",
+          "date": "2025-04-15",
+          "partyLedger": "Reliable Tech",
+          "amount": 1537.5,
+          "totalDebit": 0,
+          "totalCredit": 0,
+          "difference": 0,
+          "isBalanced": false,
+          "narration": "Diagnostic test transaction 3 with ledger audit reconciliation for 3.5MB test.",
+          "entries": [],
+          "reviewRequired": true,
+          "reviewReasons": [
+            "No source ledger entries detected (missing ALLLEDGERENTRIES / LEDGERENTRIES / entries structure)"
+          ],
+          "sourceFile": "MultiChunk_Test.json",
+          "datasetId": "",
+          "traceability": {
+            "sourceFileType": "JSON",
+            "sourceFile": "MultiChunk_Test.json",
+            "jsonPath": "$.DayBook[2]",
+            "sourceField": "VCH-3"
+          }
+        },
+        {
+          "id": "JSON-V-4",
+          "voucherNumber": "VCH-4",
+          "voucherType": "Sales",
+          "date": "2025-05-15",
+          "partyLedger": "Zenith Motors",
+          "amount": 1550,
+          "totalDebit": 0,
+          "totalCredit": 0,
+          "difference": 0,
+          "isBalanced": false,
+          "narration": "Diagnostic test transaction 4 with ledger audit reconciliation for 3.5MB test.",
+          "entries": [],
+          "reviewRequired": true,
+          "reviewReasons": [
+            "No source ledger entries detected (missing ALLLEDGERENTRIES / LEDGERENTRIES / entries structure)"
+          ],
+          "sourceFile": "MultiChunk_Test.json",
+          "datasetId": "",
+          "traceability": {
+            "sourceFileType": "JSON",
+            "sourceFile": "MultiChunk_Test.json",
+            "jsonPath": "$.DayBook[3]",
+            "sourceField": "VCH-4"
+          }
+        },
+        {
+          "id": "JSON-V-5",
+          "voucherNumber": "VCH-5",
+          "voucherType": "Purchase",
+          "date": "2025-06-15",
+          "partyLedger": "National Stores",
+          "amount": 1562.5,
+          "totalDebit": 0,
+          "totalCredit": 0,
+          "difference": 0,
+          "isBalanced": false,
+          "narration": "Diagnostic test transaction 5 with ledger audit reconciliation for 3.5MB test.",
+          "entries": [],
+          "reviewRequired": true,
+          "reviewReasons": [
+            "No source ledger entries detected (missing ALLLEDGERENTRIES / LEDGERENTRIES / entries structure)"
+          ],
+          "sourceFile": "MultiChunk_Test.json",
+          "datasetId": "",
+          "traceability": {
+            "sourceFileType": "JSON",
+            "sourceFile": "MultiChunk_Test.json",
+            "jsonPath": "$.DayBook[4]",
+            "sourceField": "VCH-5"
+          }
+        }
+      ],
+      "classifiedAs": "Voucher"
+    }
+  ]
+}

@@ -1,0 +1,309 @@
+[
+  {
+    "id": "map-voucher-id",
+    "sourceField": "id",
+    "sourcePath": "Voucher.id",
+    "sourceEntity": "Voucher",
+    "canonicalEntity": "Voucher",
+    "canonicalField": "id",
+    "confidence": "LOW",
+    "confidenceScore": 30,
+    "status": "REVIEW_REQUIRED",
+    "sampleValues": [
+      "vch-stream-1",
+      "vch-stream-2",
+      "vch-stream-3"
+    ],
+    "detectedDataType": "string",
+    "notes": "No high-confidence canonical field matched. Manual mapping required.",
+    "traceability": {
+      "sourceFileType": "JSON",
+      "sourceFile": "DayBook.json",
+      "jsonPath": "$.ENVELOPE.BODY.EXPORTDATA.TALLYMESSAGE.DayBook[0]",
+      "sourceField": "DAYBOOK-VCH-0000001"
+    }
+  },
+  {
+    "id": "map-voucher-voucherNumber",
+    "sourceField": "voucherNumber",
+    "sourcePath": "Voucher.voucherNumber",
+    "sourceEntity": "Voucher",
+    "canonicalEntity": "Voucher",
+    "canonicalField": "voucherNumber",
+    "confidence": "HIGH",
+    "confidenceScore": 95,
+    "status": "MAPPED",
+    "sampleValues": [
+      "DAYBOOK-VCH-0000001",
+      "DAYBOOK-VCH-0000002",
+      "DAYBOOK-VCH-0000003"
+    ],
+    "detectedDataType": "string",
+    "traceability": {
+      "sourceFileType": "JSON",
+      "sourceFile": "DayBook.json",
+      "jsonPath": "$.ENVELOPE.BODY.EXPORTDATA.TALLYMESSAGE.DayBook[0]",
+      "sourceField": "DAYBOOK-VCH-0000001"
+    }
+  },
+  {
+    "id": "map-voucher-voucherType",
+    "sourceField": "voucherType",
+    "sourcePath": "Voucher.voucherType",
+    "sourceEntity": "Voucher",
+    "canonicalEntity": "Voucher",
+    "canonicalField": "voucherType",
+    "confidence": "HIGH",
+    "confidenceScore": 95,
+    "status": "MAPPED",
+    "sampleValues": [
+      "Receipt",
+      "Sales",
+      "Receipt"
+    ],
+    "detectedDataType": "string",
+    "traceability": {
+      "sourceFileType": "JSON",
+      "sourceFile": "DayBook.json",
+      "jsonPath": "$.ENVELOPE.BODY.EXPORTDATA.TALLYMESSAGE.DayBook[0]",
+      "sourceField": "DAYBOOK-VCH-0000001"
+    }
+  },
+  {
+    "id": "map-voucher-date",
+    "sourceField": "date",
+    "sourcePath": "Voucher.date",
+    "sourceEntity": "Voucher",
+    "canonicalEntity": "Voucher",
+    "canonicalField": "date",
+    "confidence": "HIGH",
+    "confidenceScore": 95,
+    "status": "MAPPED",
+    "sampleValues": [
+      "2024-09-15",
+      "2024-09-15",
+      "2024-09-15"
+    ],
+    "detectedDataType": "string",
+    "traceability": {
+      "sourceFileType": "JSON",
+      "sourceFile": "DayBook.json",
+      "jsonPath": "$.ENVELOPE.BODY.EXPORTDATA.TALLYMESSAGE.DayBook[0]",
+      "sourceField": "DAYBOOK-VCH-0000001"
+    }
+  },
+  {
+    "id": "map-voucher-partyLedger",
+    "sourceField": "partyLedger",
+    "sourcePath": "Voucher.partyLedger",
+    "sourceEntity": "Voucher",
+    "canonicalEntity": "Party",
+    "canonicalField": "name",
+    "confidence": "MEDIUM",
+    "confidenceScore": 75,
+    "status": "REVIEW_REQUIRED",
+    "sampleValues": [
+      "Tata Motors",
+      "Reliance Industries",
+      "Infosys Ltd"
+    ],
+    "detectedDataType": "string",
+    "notes": "Recommendation: review auto-suggested canonical field association.",
+    "traceability": {
+      "sourceFileType": "JSON",
+      "sourceFile": "DayBook.json",
+      "jsonPath": "$.ENVELOPE.BODY.EXPORTDATA.TALLYMESSAGE.DayBook[0]",
+      "sourceField": "DAYBOOK-VCH-0000001"
+    }
+  },
+  {
+    "id": "map-voucher-amount",
+    "sourceField": "amount",
+    "sourcePath": "Voucher.amount",
+    "sourceEntity": "Voucher",
+    "canonicalEntity": "Voucher",
+    "canonicalField": "amount",
+    "confidence": "HIGH",
+    "confidenceScore": 95,
+    "status": "MAPPED",
+    "sampleValues": [
+      5001,
+      5002,
+      5003
+    ],
+    "detectedDataType": "number",
+    "traceability": {
+      "sourceFileType": "JSON",
+      "sourceFile": "DayBook.json",
+      "jsonPath": "$.ENVELOPE.BODY.EXPORTDATA.TALLYMESSAGE.DayBook[0]",
+      "sourceField": "DAYBOOK-VCH-0000001"
+    }
+  },
+  {
+    "id": "map-voucher-totalDebit",
+    "sourceField": "totalDebit",
+    "sourcePath": "Voucher.totalDebit",
+    "sourceEntity": "Voucher",
+    "canonicalEntity": "Voucher",
+    "canonicalField": "amount",
+    "confidence": "MEDIUM",
+    "confidenceScore": 75,
+    "status": "REVIEW_REQUIRED",
+    "sampleValues": [
+      5001,
+      5002,
+      5003
+    ],
+    "detectedDataType": "number",
+    "notes": "Recommendation: review auto-suggested canonical field association.",
+    "traceability": {
+      "sourceFileType": "JSON",
+      "sourceFile": "DayBook.json",
+      "jsonPath": "$.ENVELOPE.BODY.EXPORTDATA.TALLYMESSAGE.DayBook[0]",
+      "sourceField": "DAYBOOK-VCH-0000001"
+    }
+  },
+  {
+    "id": "map-voucher-totalCredit",
+    "sourceField": "totalCredit",
+    "sourcePath": "Voucher.totalCredit",
+    "sourceEntity": "Voucher",
+    "canonicalEntity": "Voucher",
+    "canonicalField": "amount",
+    "confidence": "MEDIUM",
+    "confidenceScore": 75,
+    "status": "REVIEW_REQUIRED",
+    "sampleValues": [
+      5001,
+      5002,
+      5003
+    ],
+    "detectedDataType": "number",
+    "notes": "Recommendation: review auto-suggested canonical field association.",
+    "traceability": {
+      "sourceFileType": "JSON",
+      "sourceFile": "DayBook.json",
+      "jsonPath": "$.ENVELOPE.BODY.EXPORTDATA.TALLYMESSAGE.DayBook[0]",
+      "sourceField": "DAYBOOK-VCH-0000001"
+    }
+  },
+  {
+    "id": "map-voucher-narration",
+    "sourceField": "narration",
+    "sourcePath": "Voucher.narration",
+    "sourceEntity": "Voucher",
+    "canonicalEntity": "Voucher",
+    "canonicalField": "narration",
+    "confidence": "HIGH",
+    "confidenceScore": 95,
+    "status": "MAPPED",
+    "sampleValues": [
+      "Audited transaction 1 from DayBook export",
+      "Audited transaction 2 from DayBook export",
+      "Audited transaction 3 from DayBook export"
+    ],
+    "detectedDataType": "string",
+    "traceability": {
+      "sourceFileType": "JSON",
+      "sourceFile": "DayBook.json",
+      "jsonPath": "$.ENVELOPE.BODY.EXPORTDATA.TALLYMESSAGE.DayBook[0]",
+      "sourceField": "DAYBOOK-VCH-0000001"
+    }
+  },
+  {
+    "id": "map-voucher-isBalanced",
+    "sourceField": "isBalanced",
+    "sourcePath": "Voucher.isBalanced",
+    "sourceEntity": "Voucher",
+    "canonicalEntity": "Voucher",
+    "canonicalField": "isBalanced",
+    "confidence": "LOW",
+    "confidenceScore": 30,
+    "status": "REVIEW_REQUIRED",
+    "sampleValues": [
+      true,
+      true,
+      true
+    ],
+    "detectedDataType": "string",
+    "notes": "No high-confidence canonical field matched. Manual mapping required.",
+    "traceability": {
+      "sourceFileType": "JSON",
+      "sourceFile": "DayBook.json",
+      "jsonPath": "$.ENVELOPE.BODY.EXPORTDATA.TALLYMESSAGE.DayBook[0]",
+      "sourceField": "DAYBOOK-VCH-0000001"
+    }
+  },
+  {
+    "id": "map-voucher-difference",
+    "sourceField": "difference",
+    "sourcePath": "Voucher.difference",
+    "sourceEntity": "Voucher",
+    "canonicalEntity": "Voucher",
+    "canonicalField": "difference",
+    "confidence": "LOW",
+    "confidenceScore": 30,
+    "status": "REVIEW_REQUIRED",
+    "sampleValues": [
+      0,
+      0,
+      0
+    ],
+    "detectedDataType": "number",
+    "notes": "No high-confidence canonical field matched. Manual mapping required.",
+    "traceability": {
+      "sourceFileType": "JSON",
+      "sourceFile": "DayBook.json",
+      "jsonPath": "$.ENVELOPE.BODY.EXPORTDATA.TALLYMESSAGE.DayBook[0]",
+      "sourceField": "DAYBOOK-VCH-0000001"
+    }
+  },
+  {
+    "id": "map-voucher-sourceFile",
+    "sourceField": "sourceFile",
+    "sourcePath": "Voucher.sourceFile",
+    "sourceEntity": "Voucher",
+    "canonicalEntity": "Voucher",
+    "canonicalField": "sourceFile",
+    "confidence": "LOW",
+    "confidenceScore": 30,
+    "status": "REVIEW_REQUIRED",
+    "sampleValues": [
+      "DayBook.json",
+      "DayBook.json",
+      "DayBook.json"
+    ],
+    "detectedDataType": "string",
+    "notes": "No high-confidence canonical field matched. Manual mapping required.",
+    "traceability": {
+      "sourceFileType": "JSON",
+      "sourceFile": "DayBook.json",
+      "jsonPath": "$.ENVELOPE.BODY.EXPORTDATA.TALLYMESSAGE.DayBook[0]",
+      "sourceField": "DAYBOOK-VCH-0000001"
+    }
+  },
+  {
+    "id": "map-voucher-datasetId",
+    "sourceField": "datasetId",
+    "sourcePath": "Voucher.datasetId",
+    "sourceEntity": "Voucher",
+    "canonicalEntity": "Voucher",
+    "canonicalField": "datasetId",
+    "confidence": "LOW",
+    "confidenceScore": 30,
+    "status": "REVIEW_REQUIRED",
+    "sampleValues": [
+      "",
+      "",
+      ""
+    ],
+    "detectedDataType": "string",
+    "notes": "No high-confidence canonical field matched. Manual mapping required.",
+    "traceability": {
+      "sourceFileType": "JSON",
+      "sourceFile": "DayBook.json",
+      "jsonPath": "$.ENVELOPE.BODY.EXPORTDATA.TALLYMESSAGE.DayBook[0]",
+      "sourceField": "DAYBOOK-VCH-0000001"
+    }
+  }
+]

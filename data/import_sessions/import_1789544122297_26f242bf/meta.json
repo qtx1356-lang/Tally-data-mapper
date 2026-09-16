@@ -1,0 +1,31 @@
+{
+  "sessionId": "import_1789544122297_26f242bf",
+  "createdAt": "2026-09-16T07:35:22.298Z",
+  "updatedAt": "2026-09-16T07:35:48.641Z",
+  "status": "PARSED",
+  "fileName": "DayBook.json",
+  "fileType": "JSON",
+  "fileSize": 132645394,
+  "progress": {
+    "phase": "Completed",
+    "recordsProcessed": 195443,
+    "percent": 100,
+    "message": "Parsing and validation complete"
+  },
+  "detectedCompany": "National Enterprise Solutions Ltd",
+  "detectedFinancialYear": {
+    "from": "2024-04-01",
+    "to": "2025-03-31",
+    "isDetected": true,
+    "status": "DETECTED"
+  },
+  "counts": {
+    "vouchers": 195443,
+    "ledgers": 0,
+    "stockItems": 0,
+    "totalDebit": 3373595846,
+    "totalCredit": 3373595846
+  },
+  "isBalanced": true,
+  "balanceDifference": 0
+}

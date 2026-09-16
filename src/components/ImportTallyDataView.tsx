@@ -76,6 +76,15 @@ export const ImportTallyDataView: React.FC<ImportTallyDataViewProps> = ({
 
   // Upload Progress State
   const [uploadProgress, setUploadProgress] = useState<number | null>(null);
+  const [forceChunkedDiagnostic, setForceChunkedDiagnostic] = useState<boolean>(false);
+  const [diagnosticReport, setDiagnosticReport] = useState<any | null>(null);
+  const [activeUploadSession, setActiveUploadSession] = useState<{
+    uploadId: string;
+    fileName: string;
+    fileSize: number;
+    totalChunks: number;
+    lastFailedChunk?: number;
+  } | null>(null);
 
   // Deletion Confirmation Modal
   const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
@@ -168,14 +177,409 @@ export const ImportTallyDataView: React.FC<ImportTallyDataViewProps> = ({
 
     setIsLoading(true);
     setUploadProgress(0);
-    setLoadingMessage(`Uploading ${file.name} (${formatFileSize(file.size)})...`);
+    setLoadingMessage(`Preparing upload...`);
     setErrorMessage(null);
 
+    const CHUNK_THRESHOLD = forceChunkedDiagnostic ? (1024 * 1024) : (20 * 1024 * 1024); // 20 MB normal, 1 MB if forced diagnostic
+    if (file.size > CHUNK_THRESHOLD) {
+      await uploadChunkedFile(file);
+    } else {
+      await uploadStandardFile(file);
+    }
+  };
+
+  const uploadChunkedFile = async (targetFile: File, customChunkSize?: number, resumeUploadId?: string) => {
+    // 3 MB chunks for optimal reliability with large DayBook files
+    const CHUNK_SIZE = customChunkSize || (3 * 1024 * 1024);
+    const totalChunks = Math.ceil(targetFile.size / CHUNK_SIZE);
+    let uploadId = resumeUploadId || (activeUploadSession?.fileName === targetFile.name && activeUploadSession?.fileSize === targetFile.size ? activeUploadSession.uploadId : '');
+    const receivedChunksOnServer = new Set<number>();
+
+    try {
+      setDiagnosticReport(null);
+      setLoadingMessage(`Checking large-file upload service...`);
+
+      // STEP 1: Diagnostic health check
+      try {
+        const healthUrl = '/api/import/chunk/health';
+        const healthRes = await fetch(healthUrl);
+        const healthStatus = healthRes.status;
+        const healthCt = healthRes.headers.get('content-type') || '';
+        const healthText = await healthRes.text();
+
+        console.log('[Chunk Upload Audit]', {
+          method: 'GET',
+          url: healthUrl,
+          uploadId: '-',
+          chunkIndex: '-',
+          httpStatus: healthStatus,
+          contentType: healthCt,
+          body: healthText.substring(0, 300)
+        });
+
+        if (healthStatus !== 200 || !healthCt.includes('application/json')) {
+          throw new Error(`Large-file upload service is unavailable — HTTP ${healthStatus}`);
+        }
+        let healthData: any;
+        try {
+          healthData = JSON.parse(healthText);
+        } catch {
+          throw new Error(`Large-file upload service is unavailable — HTTP ${healthStatus}`);
+        }
+        if (!healthData.success || !healthData.chunkUpload) {
+          throw new Error('Large-file upload service is unavailable.');
+        }
+      } catch (hErr: any) {
+        setIsLoading(false);
+        setUploadProgress(null);
+        setErrorMessage(hErr.message || 'Large-file upload service is unavailable.');
+        return;
+      }
+
+      // STEP 2: Check existing session to support chunk resumption
+      if (uploadId) {
+        try {
+          const statusRes = await fetch(`/api/import/chunk/status?uploadId=${encodeURIComponent(uploadId)}`);
+          if (statusRes.ok) {
+            const statusData = await statusRes.json();
+            if (statusData.success && Array.isArray(statusData.receivedChunks)) {
+              statusData.receivedChunks.forEach((idx: number) => receivedChunksOnServer.add(idx));
+              console.log(`[Upload Resume] Resuming session ${uploadId}, already received: ${statusData.receivedChunks.length}/${totalChunks} chunks`);
+            }
+          }
+        } catch (_) {}
+      }
+
+      // STEP 3: If no valid active session or resume failed, initialize new session
+      if (!uploadId || receivedChunksOnServer.size === 0) {
+        setLoadingMessage(`Initializing chunked upload for ${targetFile.name}...`);
+        
+        const initUrl = '/api/import/chunk/init';
+        const initRes = await fetch(initUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            originalFilename: targetFile.name,
+            totalFileSize: targetFile.size,
+            totalChunks,
+            mimeType: targetFile.type || 'application/json'
+          })
+        });
+
+        const initStatus = initRes.status;
+        const initCt = initRes.headers.get('content-type') || '';
+        const initText = await initRes.text();
+
+        console.log('[Chunk Upload Audit]', {
+          method: 'POST',
+          url: initUrl,
+          uploadId: '-',
+          chunkIndex: '-',
+          httpStatus: initStatus,
+          contentType: initCt,
+          body: initText.substring(0, 300)
+        });
+
+        if (initStatus < 200 || initStatus >= 300) {
+          throw new Error(`Upload initialization failed — HTTP ${initStatus}${initText ? `: ${initText.substring(0, 100)}` : ''}`);
+        }
+
+        if (!initCt.includes('application/json')) {
+          throw new Error(`Upload initialization failed — HTTP ${initStatus}: Expected JSON but received ${initCt}`);
+        }
+
+        let initData: any;
+        try {
+          initData = JSON.parse(initText);
+        } catch {
+          throw new Error(`Upload initialization failed — invalid JSON response from server`);
+        }
+
+        if (!initData.success || !initData.uploadId) {
+          throw new Error(initData.error || `Upload initialization failed — HTTP ${initStatus}`);
+        }
+
+        uploadId = initData.uploadId;
+        receivedChunksOnServer.clear();
+        setActiveUploadSession({ uploadId, fileName: targetFile.name, fileSize: targetFile.size, totalChunks });
+      }
+
+      let uploadedBytes = 0;
+      // Precompute uploaded bytes for skipped chunks
+      for (let i = 0; i < totalChunks; i++) {
+        if (receivedChunksOnServer.has(i)) {
+          const start = i * CHUNK_SIZE;
+          const end = Math.min(start + CHUNK_SIZE, targetFile.size);
+          uploadedBytes += (end - start);
+        }
+      }
+
+      const totalMbStr = (targetFile.size / (1024 * 1024)).toFixed(1);
+
+      // STEP 4: Upload chunks sequentially with retry policy
+      for (let i = 0; i < totalChunks; i++) {
+        const start = i * CHUNK_SIZE;
+        const end = Math.min(start + CHUNK_SIZE, targetFile.size);
+        const chunkBlob = targetFile.slice(start, end);
+        const currentChunkBytes = end - start;
+
+        // Skip chunks already persisted on server disk
+        if (receivedChunksOnServer.has(i)) {
+          console.log(`[Chunk Upload] Chunk ${i + 1}/${totalChunks} already on server. Skipping.`);
+          continue;
+        }
+
+        let chunkSuccess = false;
+        let attempt = 0;
+        const maxAttempts = 3;
+        let lastErrorMsg = '';
+
+        while (!chunkSuccess && attempt < maxAttempts) {
+          attempt++;
+          try {
+            const currentMbStr = (uploadedBytes / (1024 * 1024)).toFixed(1);
+            setLoadingMessage(`Uploading ${targetFile.name}\nChunk ${i + 1} of ${totalChunks}\n${currentMbStr} MB / ${totalMbStr} MB`);
+
+            await new Promise<void>((resolve, reject) => {
+              const xhr = new XMLHttpRequest();
+              const url = `/api/import/chunk?uploadId=${encodeURIComponent(uploadId)}&chunkIndex=${i}&totalChunks=${totalChunks}&totalFileSize=${targetFile.size}&originalFilename=${encodeURIComponent(targetFile.name)}`;
+              
+              xhr.open('POST', url, true);
+              xhr.timeout = 60000; // 60s timeout
+              xhr.setRequestHeader('Content-Type', 'application/octet-stream');
+              xhr.setRequestHeader('X-Upload-Id', uploadId);
+              xhr.setRequestHeader('X-Chunk-Index', i.toString());
+              xhr.setRequestHeader('X-Total-Chunks', totalChunks.toString());
+              xhr.setRequestHeader('X-Original-Filename', encodeURIComponent(targetFile.name));
+              xhr.setRequestHeader('X-Total-File-Size', targetFile.size.toString());
+
+              xhr.upload.onprogress = (e) => {
+                if (e.lengthComputable) {
+                  const totalLoadedSoFar = uploadedBytes + e.loaded;
+                  const percent = Math.min(99, Math.round((totalLoadedSoFar / targetFile.size) * 100));
+                  setUploadProgress(percent);
+                  const soFarMbStr = (totalLoadedSoFar / (1024 * 1024)).toFixed(1);
+                  setLoadingMessage(`Uploading ${targetFile.name}\nChunk ${i + 1} of ${totalChunks}\n${soFarMbStr} MB / ${totalMbStr} MB`);
+                }
+              };
+
+              xhr.onload = () => {
+                const status = xhr.status;
+                const ct = xhr.getResponseHeader('Content-Type') || '';
+                const responseText = xhr.responseText || '';
+
+                console.log('[Chunk Upload Audit]', {
+                  method: 'POST',
+                  url,
+                  uploadId,
+                  chunkIndex: i,
+                  httpStatus: status,
+                  contentType: ct,
+                  body: responseText.substring(0, 300)
+                });
+
+                if (status >= 200 && status < 300) {
+                  if (!ct.includes('application/json')) {
+                    reject(new Error(`Chunk ${i + 1} failed — HTTP ${status}: Non-JSON response received`));
+                    return;
+                  }
+                  try {
+                    const data = JSON.parse(responseText);
+                    if (data.success) {
+                      resolve();
+                    } else {
+                      reject(new Error(data.error || `Chunk ${i + 1} failed — HTTP ${status}`));
+                    }
+                  } catch {
+                    reject(new Error(`Chunk ${i + 1} failed — HTTP ${status}: Invalid JSON response`));
+                  }
+                  return;
+                }
+
+                // Specific actionable HTTP error status codes
+                if (status === 503) {
+                  reject(new Error(`Chunk ${i + 1} failed — HTTP 503 (Service Unavailable). The upload server became temporarily unavailable. Retry will resume from chunk ${i + 1}.`));
+                } else if (status === 502) {
+                  reject(new Error(`Chunk ${i + 1} failed — HTTP 502 (Bad Gateway). Gateway interrupted. Retry will resume from chunk ${i + 1}.`));
+                } else if (status === 504) {
+                  reject(new Error(`Chunk ${i + 1} failed — HTTP 504 (Gateway Timeout). Request timed out. Retry will resume from chunk ${i + 1}.`));
+                } else if (status === 500) {
+                  reject(new Error(`Chunk ${i + 1} failed — HTTP 500 (Internal Server Error). Retry will resume from chunk ${i + 1}.`));
+                } else if (status === 413) {
+                  reject(new Error(`Chunk ${i + 1} failed — HTTP 413 (Payload Too Large). Chunk exceeded maximum allowed size.`));
+                } else if (status === 404) {
+                  reject(new Error(`Chunk ${i + 1} failed — HTTP 404 (Session Expired). Upload session not found on server.`));
+                } else if (status === 422 || status === 400) {
+                  reject(new Error(`Chunk ${i + 1} failed — HTTP ${status}: ${responseText.substring(0, 100) || 'Invalid request'}`));
+                } else {
+                  reject(new Error(`Chunk ${i + 1} failed — HTTP ${status}${responseText ? `: ${responseText.substring(0, 80)}` : ''}`));
+                }
+              };
+
+              xhr.onerror = () => {
+                console.error('[Chunk Upload Audit Error]', {
+                  method: 'POST',
+                  url,
+                  uploadId,
+                  chunkIndex: i,
+                  httpStatus: xhr.status || 0,
+                  contentType: xhr.getResponseHeader('Content-Type') || '',
+                  body: xhr.responseText || ''
+                });
+                if (xhr.status > 0) {
+                  reject(new Error(`Chunk ${i + 1} failed — HTTP ${xhr.status}. Retry will resume from chunk ${i + 1}.`));
+                } else {
+                  reject(new Error(`Chunk ${i + 1} failed — Connection reset / network error (HTTP status 0). Server endpoint unreachable or connection interrupted. Retry will resume from chunk ${i + 1}.`));
+                }
+              };
+
+              xhr.ontimeout = () => {
+                console.error('[Chunk Upload Audit Timeout]', {
+                  method: 'POST',
+                  url,
+                  uploadId,
+                  chunkIndex: i,
+                  httpStatus: 408,
+                  contentType: '',
+                  body: 'Timeout'
+                });
+                reject(new Error(`Chunk ${i + 1} failed — request timed out after 60s. Retry will resume from chunk ${i + 1}.`));
+              };
+
+              // Send raw Blob directly as binary body
+              xhr.send(chunkBlob);
+            });
+
+            chunkSuccess = true;
+            receivedChunksOnServer.add(i);
+            uploadedBytes += currentChunkBytes;
+            const progressPercent = Math.min(100, Math.round((uploadedBytes / targetFile.size) * 100));
+            setUploadProgress(progressPercent);
+          } catch (err: any) {
+            lastErrorMsg = err.message || `Chunk ${i + 1} of ${totalChunks} failed`;
+            console.warn(`[Chunk Upload Retry] Chunk ${i + 1} attempt ${attempt}/${maxAttempts} failed: ${lastErrorMsg}`);
+            
+            const isNonRetryable = lastErrorMsg.includes('400') || lastErrorMsg.includes('404') || lastErrorMsg.includes('413') || lastErrorMsg.includes('422');
+            
+            if (!isNonRetryable && attempt < maxAttempts) {
+              const backoffMs = attempt === 1 ? 1000 : (attempt === 2 ? 2000 : 4000);
+              setLoadingMessage(`Chunk ${i + 1} of ${totalChunks} failed (attempt ${attempt}/${maxAttempts}). Retrying in ${backoffMs / 1000}s...`);
+              await new Promise(r => setTimeout(r, backoffMs));
+            } else {
+              setActiveUploadSession(prev => prev ? { ...prev, lastFailedChunk: i } : { uploadId, fileName: targetFile.name, fileSize: targetFile.size, totalChunks, lastFailedChunk: i });
+              throw new Error(lastErrorMsg);
+            }
+          }
+        }
+      }
+
+      setLoadingMessage(`Upload complete — processing ${targetFile.name}`);
+      setUploadProgress(100);
+
+      const completeUrl = '/api/import/chunk/complete';
+      const completeRes = await fetch(completeUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          uploadId,
+          originalFilename: targetFile.name,
+          totalFileSize: targetFile.size,
+          totalChunks,
+          fileType: selectedFormat
+        })
+      });
+
+      const completeStatus = completeRes.status;
+      const completeCt = completeRes.headers.get('content-type') || '';
+      const completeText = await completeRes.text();
+
+      console.log('[Chunk Upload Audit]', {
+        method: 'POST',
+        url: completeUrl,
+        uploadId,
+        chunkIndex: '-',
+        httpStatus: completeStatus,
+        contentType: completeCt,
+        body: completeText.substring(0, 300)
+      });
+
+      let completeData: any = null;
+      if (completeCt.includes('application/json')) {
+        try {
+          completeData = JSON.parse(completeText);
+        } catch (_) {}
+      }
+
+      if (completeStatus < 200 || completeStatus >= 300 || !completeData?.success) {
+        if (completeData?.diagnostic) {
+          setDiagnosticReport({
+            code: completeData.code,
+            error: completeData.error,
+            assembly: completeData.assembly,
+            diagnostic: completeData.diagnostic
+          });
+        }
+        const errDetail = completeData?.error || (completeText ? completeText.substring(0, 160) : `HTTP ${completeStatus}`);
+        const codePrefix = completeData?.code ? `[${completeData.code}] ` : '';
+        throw new Error(`${codePrefix}${errDetail}`);
+      }
+
+      setActiveUploadSession(null);
+      handleSuccessfulParse(completeData, targetFile);
+
+    } catch (err: any) {
+      setIsLoading(false);
+      setUploadProgress(null);
+      setErrorMessage(err.message.startsWith('Upload error:') ? err.message : `Upload error: ${err.message}`);
+    }
+  };
+
+  // Diagnostic runner: generates a 3.2 MB synthetic Tally DayBook JSON and tests chunked pipeline
+  const handleRun3MBChunkDiagnostic = async () => {
+    setIsLoading(true);
+    setErrorMessage(null);
+    setUploadProgress(0);
+    try {
+      const vouchers = [];
+      const partyNames = ['Sharma Enterprises', 'Gupta Traders', 'Apex Logistics', 'Reliable Tech', 'Zenith Motors', 'National Stores'];
+      for (let i = 1; i <= 3600; i++) {
+        const party = partyNames[i % partyNames.length];
+        vouchers.push({
+          VoucherNumber: `VCH-${i}`,
+          Date: `2025-${String((i % 12) + 1).padStart(2, '0')}-15`,
+          VoucherType: i % 4 === 0 ? 'Sales' : i % 4 === 1 ? 'Purchase' : i % 4 === 2 ? 'Receipt' : 'Payment',
+          PartyLedgerName: party,
+          Amount: 1500 + (i * 12.5),
+          Narration: `Diagnostic test transaction ${i} with ledger audit reconciliation for 3MB test.`
+        });
+      }
+      const payload = {
+        Header: {
+          Company: 'EXFIN Diagnostic Corporation',
+          FinancialYear: '2025-04-01 to 2026-03-31',
+          Source: 'TallyPrime Export Diagnostic'
+        },
+        DayBook: vouchers
+      };
+      const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+      const dummyFile = new File([blob], 'Diagnostic_3MB_DayBook.json', { type: 'application/json' });
+      setSelectedFormat('JSON');
+      setFile(dummyFile);
+      // Upload using 1 MB chunks to deliberately test multiple chunks
+      await uploadChunkedFile(dummyFile, 1 * 1024 * 1024);
+    } catch (err: any) {
+      setIsLoading(false);
+      setUploadProgress(null);
+      setErrorMessage(`Diagnostic test error: ${err.message}`);
+    }
+  };
+
+  const uploadStandardFile = async (targetFile: File) => {
     try {
       const formData = new FormData();
-      formData.append('file', file);
+      formData.append('file', targetFile);
       formData.append('fileType', selectedFormat);
-      formData.append('fileName', file.name);
+      formData.append('fileName', targetFile.name);
 
       const xhr = new XMLHttpRequest();
       xhr.open('POST', '/api/import/upload-and-parse', true);
@@ -185,7 +589,7 @@ export const ImportTallyDataView: React.FC<ImportTallyDataViewProps> = ({
           const percent = Math.round((e.loaded / e.total) * 100);
           setUploadProgress(percent);
           if (percent < 100) {
-            setLoadingMessage(`Uploading ${file.name} (${formatFileSize(e.loaded)} / ${formatFileSize(e.total)} - ${percent}%)...`);
+            setLoadingMessage(`Uploading ${targetFile.name} (${formatFileSize(e.loaded)} / ${formatFileSize(e.total)} - ${percent}%)...`);
           } else {
             setLoadingMessage('Upload complete. Parsing and validating Tally entities from disk...');
           }
@@ -196,6 +600,12 @@ export const ImportTallyDataView: React.FC<ImportTallyDataViewProps> = ({
         setIsLoading(false);
         setUploadProgress(null);
 
+        const contentType = xhr.getResponseHeader('Content-Type') || '';
+        if (!contentType.includes('application/json')) {
+          setErrorMessage(`Server response error (${xhr.status}): Expected JSON response but received unexpected format: ${contentType}`);
+          return;
+        }
+
         let data: any = null;
         try {
           data = JSON.parse(xhr.responseText);
@@ -205,29 +615,7 @@ export const ImportTallyDataView: React.FC<ImportTallyDataViewProps> = ({
         }
 
         if (xhr.status >= 200 && xhr.status < 300 && data.success) {
-          setImportSessionId(data.importSessionId || null);
-          setParsedPreview(data.preview);
-          // Zero large dataset replication in React memory:
-          setRawRecords(null);
-          setMappings(data.mappings || []);
-          setQualityReport(data.qualityReport || null);
-
-          // Pre-fill company name and FY if detected
-          if (data.preview?.detectedCompany) {
-            setOverrideCompany(data.preview.detectedCompany);
-          } else {
-            setOverrideCompany(file ? file.name.replace(/\.[^/.]+$/, '') : 'Imported Company');
-          }
-
-          if (data.preview?.detectedFinancialYear?.isDetected && data.preview.detectedFinancialYear.from && data.preview.detectedFinancialYear.to) {
-            setOverrideFyFrom(data.preview.detectedFinancialYear.from);
-            setOverrideFyTo(data.preview.detectedFinancialYear.to);
-          } else {
-            setOverrideFyFrom('');
-            setOverrideFyTo('');
-          }
-
-          setCurrentStep(2);
+          handleSuccessfulParse(data, targetFile);
         } else {
           setErrorMessage(data?.error || `Failed to parse file (Status ${xhr.status})`);
         }
@@ -245,6 +633,32 @@ export const ImportTallyDataView: React.FC<ImportTallyDataViewProps> = ({
       setUploadProgress(null);
       setErrorMessage(`Upload error: ${err.message}`);
     }
+  };
+
+  const handleSuccessfulParse = (data: any, targetFile: File) => {
+    setIsLoading(false);
+    setUploadProgress(null);
+    setImportSessionId(data.importSessionId || null);
+    setParsedPreview(data.preview);
+    setRawRecords(null);
+    setMappings(data.mappings || []);
+    setQualityReport(data.qualityReport || null);
+
+    if (data.preview?.detectedCompany) {
+      setOverrideCompany(data.preview.detectedCompany);
+    } else {
+      setOverrideCompany(targetFile ? targetFile.name.replace(/\.[^/.]+$/, '') : 'Imported Company');
+    }
+
+    if (data.preview?.detectedFinancialYear?.isDetected && data.preview.detectedFinancialYear.from && data.preview.detectedFinancialYear.to) {
+      setOverrideFyFrom(data.preview.detectedFinancialYear.from);
+      setOverrideFyTo(data.preview.detectedFinancialYear.to);
+    } else {
+      setOverrideFyFrom('');
+      setOverrideFyTo('');
+    }
+
+    setCurrentStep(2);
   };
 
   // Load Quick Sample
@@ -470,11 +884,107 @@ export const ImportTallyDataView: React.FC<ImportTallyDataViewProps> = ({
         })}
       </div>
 
-      {/* Error Alert */}
+      {/* Error Alert with Resume Option */}
       {errorMessage && (
-        <div className="rounded-lg border border-rose-900/60 bg-rose-950/40 p-3 text-xs text-rose-200 flex items-start space-x-2">
-          <AlertTriangle className="h-4 w-4 text-rose-400 flex-shrink-0 mt-0.5" />
-          <span>{errorMessage}</span>
+        <div className="rounded-lg border border-rose-900/60 bg-rose-950/40 p-3 text-xs text-rose-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="flex items-start space-x-2">
+            <AlertTriangle className="h-4 w-4 text-rose-400 flex-shrink-0 mt-0.5" />
+            <span className="leading-relaxed">{errorMessage}</span>
+          </div>
+          {activeUploadSession && file && (
+            <button
+              onClick={() => {
+                setErrorMessage(null);
+                setIsLoading(true);
+                uploadChunkedFile(file, undefined, activeUploadSession.uploadId);
+              }}
+              disabled={isLoading}
+              className="flex-shrink-0 flex items-center space-x-1.5 rounded-lg border border-rose-500/50 bg-rose-900/40 hover:bg-rose-800/60 px-3 py-1.5 font-bold text-rose-100 transition-colors shadow-sm"
+            >
+              <RefreshCw className="h-3.5 w-3.5" />
+              <span>Resume Upload from Chunk {(activeUploadSession.lastFailedChunk ?? 0) + 1}</span>
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* Structural Diagnostics Panel if vouchers were not found or structure failed */}
+      {diagnosticReport && (
+        <div className="rounded-xl border border-amber-800/60 bg-amber-950/20 p-4 text-xs text-amber-200 space-y-3">
+          <div className="flex items-center justify-between border-b border-amber-900/40 pb-2">
+            <div className="flex items-center space-x-2 font-bold text-amber-300">
+              <AlertTriangle className="h-4 w-4 text-amber-400" />
+              <span>Diagnostic Analysis — Structure & File Audit</span>
+            </div>
+            {diagnosticReport.assembly?.sha256 && (
+              <span className="font-mono text-[10px] text-slate-400">
+                SHA-256: {diagnosticReport.assembly.sha256.substring(0, 16)}...
+              </span>
+            )}
+          </div>
+
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-slate-300">
+            <div className="bg-slate-900/60 p-2 rounded border border-slate-800">
+              <span className="text-[10px] text-slate-400 block">Assembly Status</span>
+              <span className="font-semibold text-emerald-400">
+                {diagnosticReport.assembly?.assembled ? 'Assembled OK' : 'Failed'}
+              </span>
+            </div>
+            <div className="bg-slate-900/60 p-2 rounded border border-slate-800">
+              <span className="text-[10px] text-slate-400 block">Assembled Size</span>
+              <span className="font-semibold text-slate-200">
+                {formatFileSize(diagnosticReport.assembly?.assembledSize || 0)}
+              </span>
+            </div>
+            <div className="bg-slate-900/60 p-2 rounded border border-slate-800">
+              <span className="text-[10px] text-slate-400 block">Root JSON Type</span>
+              <span className="font-semibold text-sky-400 font-mono">
+                {diagnosticReport.diagnostic?.rootType || 'Unknown'}
+              </span>
+            </div>
+            <div className="bg-slate-900/60 p-2 rounded border border-slate-800">
+              <span className="text-[10px] text-slate-400 block">Bytes Inspected</span>
+              <span className="font-semibold text-slate-200">
+                {formatFileSize(diagnosticReport.diagnostic?.inspectedBytes || 0)}
+              </span>
+            </div>
+          </div>
+
+          {diagnosticReport.diagnostic?.topLevelKeys && diagnosticReport.diagnostic.topLevelKeys.length > 0 && (
+            <div>
+              <span className="text-[11px] font-semibold text-slate-300 block mb-1">
+                Top-Level Keys Detected:
+              </span>
+              <div className="flex flex-wrap gap-1">
+                {diagnosticReport.diagnostic.topLevelKeys.map((k: string) => (
+                  <span key={k} className="px-2 py-0.5 rounded bg-slate-900 border border-slate-700 font-mono text-[11px] text-amber-300">
+                    {k}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {diagnosticReport.diagnostic?.voucherArrayCandidateKeys && diagnosticReport.diagnostic.voucherArrayCandidateKeys.length > 0 && (
+            <div>
+              <span className="text-[11px] font-semibold text-slate-300 block mb-1">
+                Array Keys Detected in Sample:
+              </span>
+              <div className="flex flex-wrap gap-1">
+                {diagnosticReport.diagnostic.voucherArrayCandidateKeys.map((k: string) => (
+                  <span key={k} className="px-2 py-0.5 rounded bg-sky-950 border border-sky-800 font-mono text-[11px] text-sky-300">
+                    {k}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {diagnosticReport.diagnostic?.summary && (
+            <p className="text-slate-300 leading-relaxed text-[11px] bg-slate-900/40 p-2.5 rounded border border-slate-800">
+              {diagnosticReport.diagnostic.summary}
+            </p>
+          )}
         </div>
       )}
 
@@ -585,9 +1095,9 @@ export const ImportTallyDataView: React.FC<ImportTallyDataViewProps> = ({
           </div>
 
           {/* Action Row */}
-          <div className="flex items-center justify-between pt-2">
-            <div className="flex items-center space-x-2">
-              <span className="text-xs text-slate-400">Or test immediately with:</span>
+          <div className="flex flex-wrap items-center justify-between gap-3 pt-2">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-xs text-slate-400">Quick test:</span>
               <button
                 onClick={() => handleLoadSample('XML')}
                 disabled={isLoading}
@@ -602,6 +1112,23 @@ export const ImportTallyDataView: React.FC<ImportTallyDataViewProps> = ({
               >
                 Load Sample JSON [DEMO]
               </button>
+              <button
+                onClick={handleRun3MBChunkDiagnostic}
+                disabled={isLoading}
+                className="rounded border border-amber-600/60 bg-amber-950/40 hover:bg-amber-900/50 px-3 py-1.5 text-xs font-medium text-amber-300 transition-colors"
+                title="Tests multi-chunk upload, health check, assembly and parsing with a 3 MB file"
+              >
+                Test 3 MB Chunked [DIAGNOSTIC]
+              </button>
+              <label className="flex items-center space-x-1.5 text-xs text-slate-400 ml-2 cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={forceChunkedDiagnostic}
+                  onChange={(e) => setForceChunkedDiagnostic(e.target.checked)}
+                  className="rounded border-slate-700 bg-slate-800 text-sky-500 focus:ring-0"
+                />
+                <span>Force Chunk Mode</span>
+              </label>
             </div>
 
             <button
